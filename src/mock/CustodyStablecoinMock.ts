@@ -1,11 +1,11 @@
 import prisma from '../utils/prisma';
 
 /**
- * CustodyStablecoinMock - Pooled wallet managing token balances & exchangeRate from lending protocol
+ * CustodyStablecoinMock - Stablecoin wallet managing pool balances & exchange rate
  * 
- * This service manages a pooled custody wallet where multiple users' tokens are held together.
- * It tracks individual user shares and converts between shares and tokens using an exchange rate
- * that reflects yield from the lending protocol.
+ * This service acts as a simple stablecoin wallet, managing the pooled token balance
+ * and exchange rate from the lending protocol. Individual user shares are managed
+ * by YieldStrategyManager.
  */
 export class CustodyStablecoinMock {
   private custodyWalletId: string | null = null;
@@ -47,159 +47,40 @@ export class CustodyStablecoinMock {
     }
 
     return await prisma.custodyWallet.findUnique({
-      where: { id: this.custodyWalletId },
-      include: {
-        userShares: true
-      }
+      where: { id: this.custodyWalletId }
     });
   }
 
   /**
-   * Deposit tokens into the custody wallet
-   * User receives shares based on current exchange rate
+   * Update pool balance and shares
+   * Called by YieldStrategyManager when managing user deposits/withdrawals
    */
-  async deposit(userId: string, tokenAmount: number): Promise<{
+  async updatePoolBalance(balanceDelta: number, sharesDelta: number): Promise<{
     success: boolean;
-    shares?: number;
-    exchangeRate?: number;
     message?: string;
   }> {
     try {
-      if (tokenAmount <= 0) {
-        return { success: false, message: 'Token amount must be positive' };
-      }
-
       const wallet = await this.getCustodyWallet();
       
-      // Calculate shares to issue based on exchange rate
-      // shares = tokenAmount / exchangeRate
-      const sharesToIssue = tokenAmount / wallet.exchangeRate;
+      const newBalance = wallet.totalPoolBalance + balanceDelta;
+      const newShares = wallet.totalShares + sharesDelta;
 
-      // Update custody wallet totals
+      if (newBalance < 0 || newShares < 0) {
+        return { success: false, message: 'Invalid balance or shares update' };
+      }
+
       await prisma.custodyWallet.update({
         where: { id: wallet.id },
         data: {
-          totalPoolBalance: wallet.totalPoolBalance + tokenAmount,
-          totalShares: wallet.totalShares + sharesToIssue
+          totalPoolBalance: newBalance,
+          totalShares: newShares
         }
       });
 
-      // Get or create user share record
-      let userShare = await prisma.userShare.findUnique({
-        where: {
-          userId_custodyWalletId: {
-            userId,
-            custodyWalletId: wallet.id
-          }
-        }
-      });
-
-      if (!userShare) {
-        userShare = await prisma.userShare.create({
-          data: {
-            userId,
-            custodyWalletId: wallet.id,
-            shares: sharesToIssue,
-            lastDepositAt: new Date()
-          }
-        });
-      } else {
-        userShare = await prisma.userShare.update({
-          where: {
-            userId_custodyWalletId: {
-              userId,
-              custodyWalletId: wallet.id
-            }
-          },
-          data: {
-            shares: userShare.shares + sharesToIssue,
-            lastDepositAt: new Date()
-          }
-        });
-      }
-
-      return {
-        success: true,
-        shares: sharesToIssue,
-        exchangeRate: wallet.exchangeRate
-      };
+      return { success: true };
     } catch (error) {
-      console.error('Deposit error:', error);
-      return { success: false, message: 'Deposit operation failed' };
-    }
-  }
-
-  /**
-   * Withdraw tokens from the custody wallet
-   * User's shares are burned and tokens are returned
-   */
-  async withdraw(userId: string, tokenAmount: number): Promise<{
-    success: boolean;
-    shares?: number;
-    exchangeRate?: number;
-    message?: string;
-  }> {
-    try {
-      if (tokenAmount <= 0) {
-        return { success: false, message: 'Token amount must be positive' };
-      }
-
-      const wallet = await this.getCustodyWallet();
-
-      // Check if custody wallet has enough balance
-      if (wallet.totalPoolBalance < tokenAmount) {
-        return { success: false, message: 'Insufficient pool balance' };
-      }
-
-      // Calculate shares to burn based on exchange rate
-      // shares = tokenAmount / exchangeRate
-      const sharesToBurn = tokenAmount / wallet.exchangeRate;
-
-      // Get user share record
-      const userShare = await prisma.userShare.findUnique({
-        where: {
-          userId_custodyWalletId: {
-            userId,
-            custodyWalletId: wallet.id
-          }
-        }
-      });
-
-      if (!userShare || userShare.shares < sharesToBurn) {
-        return { success: false, message: 'Insufficient user shares' };
-      }
-
-      // Update custody wallet totals
-      await prisma.custodyWallet.update({
-        where: { id: wallet.id },
-        data: {
-          totalPoolBalance: wallet.totalPoolBalance - tokenAmount,
-          totalShares: wallet.totalShares - sharesToBurn
-        }
-      });
-
-      // Update user shares
-      await prisma.userShare.update({
-        where: {
-          userId_custodyWalletId: {
-            userId,
-            custodyWalletId: wallet.id
-          }
-        },
-        data: {
-          shares: userShare.shares - sharesToBurn,
-          lastWithdrawalAt: new Date()
-        }
-      });
-
-      return {
-        success: true,
-        shares: sharesToBurn,
-        exchangeRate: wallet.exchangeRate
-      };
-    } catch (error) {
-      console.error('Withdraw error:', error);
-      return { success: false, message: 'Withdrawal operation failed' };
+      console.error('Update pool balance error:', error);
+      return { success: false, message: 'Failed to update pool balance' };
     }
   }
 
@@ -239,47 +120,11 @@ export class CustodyStablecoinMock {
   }
 
   /**
-   * Get user's token balance (shares * exchangeRate)
+   * Get current exchange rate
    */
-  async getUserBalance(userId: string): Promise<{
-    success: boolean;
-    shares?: number;
-    tokenBalance?: number;
-    exchangeRate?: number;
-  }> {
-    try {
-      const wallet = await this.getCustodyWallet();
-
-      const userShare = await prisma.userShare.findUnique({
-        where: {
-          userId_custodyWalletId: {
-            userId,
-            custodyWalletId: wallet.id
-          }
-        }
-      });
-
-      if (!userShare) {
-        return {
-          success: true,
-          shares: 0,
-          tokenBalance: 0,
-          exchangeRate: wallet.exchangeRate
-        };
-      }
-
-      const tokenBalance = userShare.shares * wallet.exchangeRate;
-
-      return {
-        success: true,
-        shares: userShare.shares,
-        tokenBalance,
-        exchangeRate: wallet.exchangeRate
-      };
-    } catch (error) {
-      console.error('Get user balance error:', error);
-      return { success: false };
-    }
+  async getExchangeRate(): Promise<number> {
+    const wallet = await this.getCustodyWallet();
+    return wallet.exchangeRate;
   }
 
   /**
@@ -291,15 +136,11 @@ export class CustodyStablecoinMock {
       totalPoolBalance: number;
       totalShares: number;
       exchangeRate: number;
-      totalUsers: number;
       lastRebalanceAt: Date;
     };
   }> {
     try {
       const wallet = await this.getCustodyWallet();
-      const userShares = await prisma.userShare.findMany({
-        where: { custodyWalletId: wallet.id }
-      });
 
       return {
         success: true,
@@ -307,7 +148,6 @@ export class CustodyStablecoinMock {
           totalPoolBalance: wallet.totalPoolBalance,
           totalShares: wallet.totalShares,
           exchangeRate: wallet.exchangeRate,
-          totalUsers: userShares.length,
           lastRebalanceAt: wallet.lastRebalanceAt
         }
       };

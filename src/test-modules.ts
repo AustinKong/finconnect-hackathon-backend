@@ -42,13 +42,9 @@ async function testModules() {
     console.log('5️⃣ Testing integrated deposit flow...');
     const testUserId = 'test-user-123';
     
-    // Deposit 1000 USDC to custody wallet
-    const depositResult = await custodyWallet.deposit(testUserId, 1000);
+    // Deposit 1000 USDC via yield strategy (which manages user shares)
+    const depositResult = await yieldStrategy.deposit(testUserId, 1000);
     console.log(`✅ User deposited 1000 USDC, received ${depositResult.shares?.toFixed(2)} shares`);
-
-    // Add liquidity to yield strategy
-    await yieldStrategy.addLiquidity(1000);
-    console.log(`✅ Added 1000 USDC to liquidity pool`);
 
     // Check if rebalancing is needed
     const rebalanceCheck = await yieldStrategy.shouldRebalance();
@@ -57,8 +53,8 @@ async function testModules() {
       console.log(`   Reason: ${rebalanceCheck.reason}`);
     }
 
-    // Get user balance
-    const balance = await custodyWallet.getUserBalance(testUserId);
+    // Get user balance from yield strategy
+    const balance = await yieldStrategy.getUserBalance(testUserId);
     console.log(`✅ User balance: ${balance.tokenBalance?.toFixed(2)} USDC (${balance.shares?.toFixed(2)} shares)\n`);
 
     // Test 6: Get a settlement quote
@@ -81,7 +77,6 @@ async function testModules() {
       console.log(`✅ Pool stats:`);
       console.log(`   Total balance: ${poolStats.stats.totalPoolBalance.toFixed(2)} USDC`);
       console.log(`   Total shares: ${poolStats.stats.totalShares.toFixed(2)}`);
-      console.log(`   Total users: ${poolStats.stats.totalUsers}`);
     }
 
     if (protocolStats.success && protocolStats.stats) {
@@ -94,7 +89,8 @@ async function testModules() {
       console.log(`✅ Strategy stats:`);
       console.log(`   Current liquidity: ${strategyStats.stats.currentLiquidity.toFixed(2)} USDC`);
       console.log(`   Total staked: ${strategyStats.stats.totalStaked.toFixed(2)} USDC`);
-      console.log(`   Liquidity ratio: ${(strategyStats.stats.liquidityRatio * 100).toFixed(2)}%\n`);
+      console.log(`   Liquidity ratio: ${(strategyStats.stats.liquidityRatio * 100).toFixed(2)}%`);
+      console.log(`   Total users: ${strategyStats.stats.totalUsers}\n`);
     }
 
     console.log('✅ All tests passed! Modules are working correctly.\n');

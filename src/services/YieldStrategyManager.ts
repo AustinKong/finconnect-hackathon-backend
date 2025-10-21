@@ -3,13 +3,15 @@ import custodyWallet from '../mock/CustodyStablecoinMock';
 import lendingProtocol from '../mock/LendingProtocolMock';
 
 /**
- * YieldStrategyManager - Decides stake/unstake, manages user shares & liquidity buffers
+ * YieldStrategyManager - Manages user shares, decides stake/unstake, and manages liquidity buffers
  * 
- * This service manages the yield strategy by deciding when to stake or unstake funds,
- * maintaining liquidity buffers for user withdrawals, and optimizing yield generation.
+ * This service manages the yield strategy by handling user deposits/withdrawals,
+ * deciding when to stake or unstake funds, maintaining liquidity buffers for user withdrawals,
+ * and optimizing yield generation.
  */
 export class YieldStrategyManager {
   private strategyId: string | null = null;
+  private custodyWalletId: string | null = null;
 
   /**
    * Initialize or get the yield strategy
@@ -33,11 +35,27 @@ export class YieldStrategyManager {
       }
 
       this.strategyId = strategy.id;
+      
+      // Initialize custody wallet
+      const wallet = await custodyWallet.initializeCustodyWallet();
+      this.custodyWalletId = wallet.id;
+      
       return strategy;
     } catch (error) {
       console.error('Initialize yield strategy error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get the custody wallet ID
+   */
+  private async getCustodyWalletId(): Promise<string> {
+    if (!this.custodyWalletId) {
+      const wallet = await custodyWallet.getCustodyWallet();
+      this.custodyWalletId = wallet.id;
+    }
+    return this.custodyWalletId!;
   }
 
   /**
@@ -51,6 +69,200 @@ export class YieldStrategyManager {
     return await prisma.yieldStrategy.findUnique({
       where: { id: this.strategyId }
     });
+  }
+
+  /**
+   * User deposit - User deposits tokens and receives shares
+   * This handles the user share tracking that was previously in CustodyStablecoinMock
+   */
+  async deposit(userId: string, tokenAmount: number): Promise<{
+    success: boolean;
+    shares?: number;
+    exchangeRate?: number;
+    message?: string;
+  }> {
+    try {
+      if (tokenAmount <= 0) {
+        return { success: false, message: 'Token amount must be positive' };
+      }
+
+      const custodyWalletId = await this.getCustodyWalletId();
+      const exchangeRate = await custodyWallet.getExchangeRate();
+      
+      // Calculate shares to issue based on exchange rate
+      // shares = tokenAmount / exchangeRate
+      const sharesToIssue = tokenAmount / exchangeRate;
+
+      // Update custody wallet pool totals
+      const updateResult = await custodyWallet.updatePoolBalance(tokenAmount, sharesToIssue);
+      if (!updateResult.success) {
+        return { success: false, message: updateResult.message };
+      }
+
+      // Get or create user share record
+      let userShare = await prisma.userShare.findUnique({
+        where: {
+          userId_custodyWalletId: {
+            userId,
+            custodyWalletId
+          }
+        }
+      });
+
+      if (!userShare) {
+        userShare = await prisma.userShare.create({
+          data: {
+            userId,
+            custodyWalletId,
+            shares: sharesToIssue,
+            lastDepositAt: new Date()
+          }
+        });
+      } else {
+        userShare = await prisma.userShare.update({
+          where: {
+            userId_custodyWalletId: {
+              userId,
+              custodyWalletId
+            }
+          },
+          data: {
+            shares: userShare.shares + sharesToIssue,
+            lastDepositAt: new Date()
+          }
+        });
+      }
+
+      // Add liquidity to the strategy buffer
+      await this.addLiquidityInternal(tokenAmount);
+
+      return {
+        success: true,
+        shares: sharesToIssue,
+        exchangeRate
+      };
+    } catch (error) {
+      console.error('Deposit error:', error);
+      return { success: false, message: 'Deposit operation failed' };
+    }
+  }
+
+  /**
+   * User withdraw - User withdraws tokens by burning shares
+   * This handles the user share tracking that was previously in CustodyStablecoinMock
+   */
+  async withdraw(userId: string, tokenAmount: number): Promise<{
+    success: boolean;
+    shares?: number;
+    exchangeRate?: number;
+    message?: string;
+  }> {
+    try {
+      if (tokenAmount <= 0) {
+        return { success: false, message: 'Token amount must be positive' };
+      }
+
+      const custodyWalletId = await this.getCustodyWalletId();
+      const exchangeRate = await custodyWallet.getExchangeRate();
+
+      // Calculate shares to burn based on exchange rate
+      // shares = tokenAmount / exchangeRate
+      const sharesToBurn = tokenAmount / exchangeRate;
+
+      // Get user share record
+      const userShare = await prisma.userShare.findUnique({
+        where: {
+          userId_custodyWalletId: {
+            userId,
+            custodyWalletId
+          }
+        }
+      });
+
+      if (!userShare || userShare.shares < sharesToBurn) {
+        return { success: false, message: 'Insufficient user shares' };
+      }
+
+      // Remove liquidity from the strategy buffer (may trigger unstaking)
+      const removeLiqResult = await this.removeLiquidity(tokenAmount);
+      if (!removeLiqResult.success) {
+        return { success: false, message: removeLiqResult.message };
+      }
+
+      // Update custody wallet pool totals
+      const updateResult = await custodyWallet.updatePoolBalance(-tokenAmount, -sharesToBurn);
+      if (!updateResult.success) {
+        return { success: false, message: updateResult.message };
+      }
+
+      // Update user shares
+      await prisma.userShare.update({
+        where: {
+          userId_custodyWalletId: {
+            userId,
+            custodyWalletId
+          }
+        },
+        data: {
+          shares: userShare.shares - sharesToBurn,
+          lastWithdrawalAt: new Date()
+        }
+      });
+
+      return {
+        success: true,
+        shares: sharesToBurn,
+        exchangeRate
+      };
+    } catch (error) {
+      console.error('Withdraw error:', error);
+      return { success: false, message: 'Withdrawal operation failed' };
+    }
+  }
+
+  /**
+   * Get user's token balance (shares * exchangeRate)
+   */
+  async getUserBalance(userId: string): Promise<{
+    success: boolean;
+    shares?: number;
+    tokenBalance?: number;
+    exchangeRate?: number;
+  }> {
+    try {
+      const custodyWalletId = await this.getCustodyWalletId();
+      const exchangeRate = await custodyWallet.getExchangeRate();
+
+      const userShare = await prisma.userShare.findUnique({
+        where: {
+          userId_custodyWalletId: {
+            userId,
+            custodyWalletId
+          }
+        }
+      });
+
+      if (!userShare) {
+        return {
+          success: true,
+          shares: 0,
+          tokenBalance: 0,
+          exchangeRate
+        };
+      }
+
+      const tokenBalance = userShare.shares * exchangeRate;
+
+      return {
+        success: true,
+        shares: userShare.shares,
+        tokenBalance,
+        exchangeRate
+      };
+    } catch (error) {
+      console.error('Get user balance error:', error);
+      return { success: false };
+    }
   }
 
   /**
@@ -230,9 +442,9 @@ export class YieldStrategyManager {
   }
 
   /**
-   * Add liquidity to the buffer (called on user deposits)
+   * Add liquidity to the buffer (internal use, called on user deposits)
    */
-  async addLiquidity(amount: number): Promise<{ success: boolean }> {
+  private async addLiquidityInternal(amount: number): Promise<{ success: boolean }> {
     try {
       const strategy = await this.getStrategy();
 
@@ -243,19 +455,32 @@ export class YieldStrategyManager {
         }
       });
 
-      // Check if auto-rebalance is enabled and rebalance if needed
-      if (strategy.autoRebalance) {
-        const shouldRebal = await this.shouldRebalance();
-        if (shouldRebal.shouldRebalance) {
-          await this.rebalance();
-        }
-      }
-
       return { success: true };
     } catch (error) {
       console.error('Add liquidity error:', error);
       return { success: false };
     }
+  }
+
+  /**
+   * Add liquidity to the buffer (called on user deposits)
+   */
+  async addLiquidity(amount: number): Promise<{ success: boolean }> {
+    const result = await this.addLiquidityInternal(amount);
+    if (!result.success) {
+      return result;
+    }
+
+    // Check if auto-rebalance is enabled and rebalance if needed
+    const strategy = await this.getStrategy();
+    if (strategy.autoRebalance) {
+      const shouldRebal = await this.shouldRebalance();
+      if (shouldRebal.shouldRebalance) {
+        await this.rebalance();
+      }
+    }
+
+    return { success: true };
   }
 
   /**
@@ -352,13 +577,21 @@ export class YieldStrategyManager {
       minBuffer: number;
       maxBuffer: number;
       autoRebalance: boolean;
+      totalUsers: number;
       lastRebalanceAt: Date;
     };
   }> {
     try {
       const strategy = await this.getStrategy();
+      const custodyWalletId = await this.getCustodyWalletId();
+      
       const totalManaged = strategy.currentLiquidity + strategy.totalStaked;
       const liquidityRatio = totalManaged > 0 ? strategy.currentLiquidity / totalManaged : 0;
+
+      // Get user count
+      const userShares = await prisma.userShare.findMany({
+        where: { custodyWalletId }
+      });
 
       return {
         success: true,
@@ -370,6 +603,7 @@ export class YieldStrategyManager {
           minBuffer: strategy.minLiquidityBuffer,
           maxBuffer: strategy.maxLiquidityBuffer,
           autoRebalance: strategy.autoRebalance,
+          totalUsers: userShares.length,
           lastRebalanceAt: strategy.lastRebalanceAt
         }
       };
