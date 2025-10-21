@@ -161,18 +161,19 @@ model YieldStrategy {
 }
 
 model FiatSettlement {
-  id                String   @id @default(uuid())
-  merchantId        String
-  merchant          Merchant @relation(fields: [merchantId], references: [id])
-  settlementType    String   // TOKEN_TO_FIAT or FIAT_TO_TOKEN
-  tokenAmount       Float    // Amount in tokens (USDC)
-  fiatAmount        Float    // Amount in fiat currency
-  fiatCurrency      String   // Currency code (USD, EUR, etc.)
-  fxRate            Float    // Exchange rate used
-  fxMarkup          Float    @default(0.02)  // 2% FX markup
-  settlementFee     Float    @default(0)     // Settlement fee charged
-  status            String   @default("PENDING") // PENDING, COMPLETED, FAILED
+  id                String    @id @default(uuid())
+  merchantId        String?
+  merchant          Merchant? @relation(fields: [merchantId], references: [id])
+  userId            String?   // For user settlements (instead of merchant)
+  settlementType    String    // TOKEN_TO_FIAT or FIAT_TO_TOKEN
+  tokenAmount       Float     // Amount in tokens (USDC)
+  fiatAmount        Float     // Amount in fiat currency
+  fiatCurrency      String    // Currency code (USD, EUR, etc.)
+  fxRate            Float     // Exchange rate used
+  fxMarkup          Float     @default(0.02)  // 2% FX markup
+  settlementFee     Float     @default(0)     // Settlement fee charged
+  status            String    @default("PENDING") // PENDING, COMPLETED, FAILED
   settledAt         DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }

@@ -107,7 +107,7 @@ export class FiatSettlementBridge {
       // Create settlement record
       const settlement = await prisma.fiatSettlement.create({
         data: {
-          merchantId: userId, // Using userId as merchantId for user settlements
+          userId, // Store userId for user settlements
           settlementType: 'FIAT_TO_TOKEN',
           tokenAmount: finalStablecoinAmount,
           fiatAmount,
@@ -216,7 +216,7 @@ export class FiatSettlementBridge {
       // Create settlement record
       const settlement = await prisma.fiatSettlement.create({
         data: {
-          merchantId: userId, // Using userId as merchantId for user settlements
+          userId, // Store userId for user settlements
           settlementType: 'TOKEN_TO_FIAT',
           tokenAmount: stablecoinAmount,
           fiatAmount: finalFiatAmount,
