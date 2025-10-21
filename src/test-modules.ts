@@ -87,6 +87,39 @@ async function testModules() {
       console.log(`   Total users: ${strategyStats.stats.totalUsers}\n`);
     }
 
+    // Test 8: Test withdrawal flow with fiat
+    console.log('8️⃣ Testing withdrawal flow with fiat...');
+    
+    // Check if user has sufficient balance
+    const balanceCheck = await yieldStrategy.hasSufficientBalance(testUserId, 100, 'USD');
+    console.log(`✅ Sufficient balance check: ${balanceCheck.hasSufficient} (has ${balanceCheck.currentBalance?.toFixed(2)} USD, needs 100 USD)`);
+    
+    if (balanceCheck.hasSufficient) {
+      // Withdraw 100 USD
+      const withdrawResult = await yieldStrategy.withdraw(testUserId, 100, 'USD');
+      console.log(`✅ User withdrew ${withdrawResult.fiatAmount?.toFixed(2)} USD, burned ${withdrawResult.shares?.toFixed(2)} shares`);
+      console.log(`   Token amount: ${withdrawResult.tokenAmount?.toFixed(2)} USDC`);
+      
+      // Check balance after withdrawal
+      const balanceAfter = await yieldStrategy.getUserBalance(testUserId, 'USD');
+      console.log(`✅ Balance after withdrawal: ${balanceAfter.tokenBalance?.toFixed(2)} USDC (${balanceAfter.fiatBalance?.toFixed(2)} USD, ${balanceAfter.shares?.toFixed(2)} shares)\n`);
+    }
+
+    // Test 9: Test yield synchronization
+    console.log('9️⃣ Testing yield synchronization...');
+    
+    // Sync yield from lending protocol
+    const syncResult = await yieldStrategy.syncYield();
+    if (syncResult.success) {
+      console.log(`✅ Yield synchronized successfully`);
+      console.log(`   Exchange rate: ${syncResult.exchangeRate?.toFixed(6)}`);
+      console.log(`   Interest earned: ${syncResult.interestEarned?.toFixed(2)} USDC`);
+      
+      // Check updated balance after yield accrual
+      const balanceAfterYield = await yieldStrategy.getUserBalance(testUserId, 'USD');
+      console.log(`✅ Balance after yield: ${balanceAfterYield.tokenBalance?.toFixed(2)} USDC (${balanceAfterYield.fiatBalance?.toFixed(2)} USD)\n`);
+    }
+
     console.log('✅ All tests passed! Modules are working correctly.\n');
     return true;
   } catch (error) {

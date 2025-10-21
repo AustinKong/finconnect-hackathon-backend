@@ -195,19 +195,20 @@ export class YieldStrategyManager {
         return { success: false, message: 'Fiat amount must be positive' };
       }
 
-      // Step 1: Get conversion quote to determine required token amount
-      const conversionQuote = await fiatBridge.getTokenToFiatQuote(0, currency);
-      if (!conversionQuote.success || !conversionQuote.quote) {
+      // Step 1: Get conversion quote to estimate required token amount
+      // Use a sample amount to get the rates
+      const sampleQuote = await fiatBridge.getTokenToFiatQuote(100, currency);
+      if (!sampleQuote.success || !sampleQuote.quote) {
         return { success: false, message: 'Failed to get conversion quote' };
       }
 
-      // Calculate required token amount (reverse the conversion with fees)
-      // We need: tokenAmount * fxRate - settlementFee = fiatAmount
-      // So: tokenAmount = (fiatAmount + settlementFee) / fxRate
-      // But settlementFee = tokenAmount * fxRate * settlementFeeRate
-      // Solving: tokenAmount = fiatAmount / (fxRate * (1 - settlementFeeRate))
-      const effectiveFxRate = conversionQuote.quote.fxRate;
-      const settlementFeeRate = conversionQuote.quote.settlementFee / conversionQuote.quote.fiatAmount;
+      // Calculate required token amount by reversing the conversion formula
+      // effectiveFiatAmount = tokenAmount * fxRate - settlementFee
+      // settlementFee = tokenAmount * fxRate * settlementFeeRate
+      // effectiveFiatAmount = tokenAmount * fxRate * (1 - settlementFeeRate)
+      // tokenAmount = effectiveFiatAmount / (fxRate * (1 - settlementFeeRate))
+      const effectiveFxRate = sampleQuote.quote.fxRate;
+      const settlementFeeRate = sampleQuote.quote.settlementFee / sampleQuote.quote.fiatAmount;
       const requiredTokenAmount = fiatAmount / (effectiveFxRate * (1 - settlementFeeRate));
 
       // Step 2: Get current exchange rate from lending protocol
