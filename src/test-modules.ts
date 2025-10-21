@@ -1,5 +1,5 @@
-import custodyWallet from './services/CustodyStablecoinMock';
-import lendingProtocol from './services/LendingProtocolMock';
+import custodyWallet from './mock/CustodyStablecoinMock';
+import lendingProtocol from './mock/LendingProtocolMock';
 import yieldStrategy from './services/YieldStrategyManager';
 import fiatSettlement from './services/FiatSettlementBridge';
 

@@ -1,5 +1,5 @@
 import prisma from '../utils/prisma';
-import fxService from './FXServiceMock';
+import fxService from '../mock/FXServiceMock';
 
 /**
  * FiatSettlementBridge - Converts tokens ↔ fiat for merchant settlement via FX + fees

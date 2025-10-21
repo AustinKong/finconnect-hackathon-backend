@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import prisma from '../utils/prisma';
-import visaNetwork from '../services/VisaNetworkMock';
+import visaNetwork from '../mock/VisaNetworkMock';
 import stablecoinAdapter from '../services/StablecoinYieldAdapterMock';
 import missionEngine from '../services/MissionEngine';
-import fxService from '../services/FXServiceMock';
+import fxService from '../mock/FXServiceMock';
 import walletService from '../services/WalletService';
 
 const router = Router();

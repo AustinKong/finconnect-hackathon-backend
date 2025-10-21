@@ -5,8 +5,6 @@ import walletRouter from './routes/wallet';
 import posRouter from './routes/pos';
 import missionsRouter from './routes/missions';
 import analyticsRouter from './routes/analytics';
-import fxRouter from './routes/fx';
-import mockRouter from './routes/mock';
 
 dotenv.config();
 
@@ -27,8 +25,6 @@ app.use('/wallet', walletRouter);
 app.use('/pos', posRouter);
 app.use('/missions', missionsRouter);
 app.use('/analytics', analyticsRouter);
-app.use('/fx', fxRouter);
-app.use('/mock', mockRouter);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -1,6 +1,6 @@
 import prisma from '../utils/prisma';
-import custodyWallet from './CustodyStablecoinMock';
-import lendingProtocol from './LendingProtocolMock';
+import custodyWallet from '../mock/CustodyStablecoinMock';
+import lendingProtocol from '../mock/LendingProtocolMock';
 
 /**
  * YieldStrategyManager - Decides stake/unstake, manages user shares & liquidity buffers
