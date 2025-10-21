@@ -4,6 +4,7 @@ import visaNetwork from '../services/VisaNetworkMock';
 import stablecoinAdapter from '../services/StablecoinYieldAdapterMock';
 import missionEngine from '../services/MissionEngine';
 import fxService from '../services/FXServiceMock';
+import walletService from '../services/WalletService';
 
 const router = Router();
 
@@ -201,41 +202,30 @@ router.post('/refund', async (req, res) => {
       return res.status(400).json({ error: 'Refund amount exceeds transaction amount' });
     }
 
-    // Update wallet
-    const wallet = await prisma.wallet.findUnique({
-      where: { userId: transaction.userId }
+    // Add refund to wallet using WalletService (will auto-stake if enabled)
+    const result = await walletService.addFunds(transaction.userId, amount, {
+      description: `Refund for transaction ${transactionId}`,
+      transactionType: 'REFUND',
+      currency: transaction.currency,
+      merchantId: transaction.merchantId || undefined,
+      metadata: JSON.stringify({ originalTransactionId: transactionId })
     });
 
-    if (!wallet) {
-      return res.status(404).json({ error: 'Wallet not found' });
+    if (!result.success) {
+      return res.status(400).json({ error: result.message });
     }
 
-    await prisma.wallet.update({
-      where: { userId: transaction.userId },
-      data: {
-        balance: wallet.balance + amount
-      }
-    });
-
-    // Create refund transaction
-    const refundTransaction = await prisma.transaction.create({
-      data: {
-        userId: transaction.userId,
-        type: 'REFUND',
-        amount,
-        currency: transaction.currency,
-        merchantId: transaction.merchantId,
-        description: `Refund for transaction ${transactionId}`,
-        status: 'COMPLETED',
-        metadata: JSON.stringify({ originalTransactionId: transactionId })
-      }
-    });
-
-    res.json({
+    const response: any = {
       success: true,
-      refund: refundTransaction,
-      wallet: await prisma.wallet.findUnique({ where: { userId: transaction.userId } })
-    });
+      wallet: result.wallet
+    };
+
+    if (result.autoStaked) {
+      response.autoStaked = result.autoStaked;
+      response.message = `Refund automatically staked: ${result.autoStaked} ${transaction.currency}`;
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('Refund error:', error);
     res.status(500).json({ error: 'Failed to process refund' });

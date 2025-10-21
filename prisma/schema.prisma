@@ -28,6 +28,7 @@ model Wallet {
   balance         Float    @default(0)
   stakedAmount    Float    @default(0)
   yieldEarned     Float    @default(0)
+  autoStake       Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

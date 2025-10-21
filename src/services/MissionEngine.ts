@@ -1,4 +1,5 @@
 import prisma from '../utils/prisma';
+import walletService from './WalletService';
 
 export class MissionEngine {
   /**
@@ -222,35 +223,19 @@ export class MissionEngine {
 
       // Apply reward based on type
       const mission = userMission.mission;
-      const wallet = await prisma.wallet.findUnique({
-        where: { userId }
-      });
 
-      if (!wallet) {
-        return { success: false, message: 'Wallet not found' };
-      }
-
-      // For CASHBACK, add to balance
+      // For CASHBACK, add to wallet balance using WalletService (will auto-stake if enabled)
       if (mission.rewardType === 'CASHBACK') {
-        await prisma.wallet.update({
-          where: { userId },
-          data: {
-            balance: wallet.balance + mission.rewardAmount
-          }
+        const result = await walletService.addFunds(userId, mission.rewardAmount, {
+          description: `Mission reward: ${mission.title}`,
+          transactionType: 'MISSION_REWARD',
+          currency: 'USD',
+          metadata: JSON.stringify({ missionId: mission.id })
         });
 
-        // Record transaction
-        await prisma.transaction.create({
-          data: {
-            userId,
-            type: 'MISSION_REWARD',
-            amount: mission.rewardAmount,
-            currency: 'USD',
-            description: `Mission reward: ${mission.title}`,
-            status: 'COMPLETED',
-            metadata: JSON.stringify({ missionId: mission.id })
-          }
-        });
+        if (!result.success) {
+          return { success: false, message: result.message };
+        }
       }
 
       // Mark reward as claimed

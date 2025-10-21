@@ -1,4 +1,5 @@
 import prisma from '../utils/prisma';
+import walletService from './WalletService';
 
 export class StablecoinYieldAdapterMock {
   private yieldRate: number;
@@ -114,24 +115,22 @@ export class StablecoinYieldAdapterMock {
       const dailyRate = this.yieldRate / 365;
       const yieldAmount = wallet.stakedAmount * dailyRate;
 
-      // Update wallet with earned yield
+      // Update wallet with earned yield using WalletService (will auto-stake if enabled)
+      const result = await walletService.addFunds(userId, yieldAmount, {
+        description: `Daily yield on ${wallet.stakedAmount} USDC`,
+        transactionType: 'YIELD',
+        currency: 'USDC'
+      });
+
+      if (!result.success) {
+        return { success: false, yieldEarned: 0 };
+      }
+
+      // Also update yieldEarned tracker
       await prisma.wallet.update({
         where: { userId },
         data: {
-          balance: wallet.balance + yieldAmount,
           yieldEarned: wallet.yieldEarned + yieldAmount
-        }
-      });
-
-      // Record transaction
-      await prisma.transaction.create({
-        data: {
-          userId,
-          type: 'YIELD',
-          amount: yieldAmount,
-          currency: 'USDC',
-          description: `Daily yield on ${wallet.stakedAmount} USDC`,
-          status: 'COMPLETED'
         }
       });
 
