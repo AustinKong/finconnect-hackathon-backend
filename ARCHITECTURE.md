@@ -28,6 +28,18 @@
 ├──────────────────────┴──────────────────┴──────────────────────┤
 │                      FXService                                   │
 │  - getRate()  - convert()  - getSupportedCurrencies()           │
+├─────────────────────────────────────────────────────────────────┤
+│            New GlobeTrotter+ Advanced Modules                   │
+├──────────────────┬───────────────────┬────────────────────────┤
+│ CustodyStablecoin│ LendingProtocol   │ YieldStrategy          │
+│ Mock             │ Mock              │ Manager                │
+│ - deposit()      │ - deposit()       │ - rebalance()          │
+│ - withdraw()     │ - withdraw()      │ - addLiquidity()       │
+│ - getUserBalance()│ - accrueInterest()│ - removeLiquidity()    │
+│ - getPoolStats() │ - getStats()      │ - syncYield()          │
+├──────────────────┴───────────────────┴────────────────────────┤
+│                   FiatSettlementBridge                          │
+│  - tokenToFiat()  - fiatToToken()  - getQuote()                │
 └─────────────────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -41,8 +53,9 @@
 │  ┌──────────┬──────────┬─────────────┬───────────┬───────────┐ │
 │  │  User    │  Wallet  │ Transaction │  Merchant │  Mission  │ │
 │  ├──────────┼──────────┼─────────────┼───────────┼───────────┤ │
-│  │UserMis   │Exchange  │             │           │           │ │
-│  │sion      │Rate      │             │           │           │ │
+│  │UserMis   │Custody   │Lending      │Fiat       │Yield      │ │
+│  │sion      │Wallet    │Protocol     │Settlement │Strategy   │ │
+│  │          │UserShare │LendingDep   │           │           │ │
 │  └──────────┴──────────┴─────────────┴───────────┴───────────┘ │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -56,7 +69,14 @@
 4. **Merchant** - Merchants where users can spend
 5. **Mission** - Gamified travel missions
 6. **UserMission** - User's progress on missions
-7. **ExchangeRate** - FX rates between currencies
+
+### New GlobeTrotter+ Models
+7. **CustodyWallet** - Pooled wallet with share-based accounting
+8. **UserShare** - User's shares in the custody pool
+9. **LendingProtocol** - Aave-style lending protocol for yield
+10. **LendingDeposit** - Individual deposits in lending protocol
+11. **YieldStrategy** - Liquidity buffer and rebalancing strategy
+12. **FiatSettlement** - Merchant fiat settlements with FX
 
 ## API Flow Examples
 
@@ -193,3 +213,29 @@ VISA_PROCESSING_FEE   # Visa fee percentage (default: 0.029)
 **Missions**: 2 active missions
 **Exchange Rates**: 8 currency pairs
 **Currencies Supported**: 15 (USD, EUR, GBP, JPY, SGD, AUD, etc.)
+
+## GlobeTrotter+ Advanced Modules
+
+The platform now includes 4 advanced modules for yield generation and merchant settlements:
+
+### 1. CustodyStablecoinMock
+Manages a pooled custody wallet where user deposits are tracked via shares (similar to Uniswap LP tokens). The share value increases as yield is earned from the lending protocol.
+
+### 2. LendingProtocolMock
+Simulates an Aave-style lending protocol with continuous compound interest (5% APR by default). Deposited funds earn yield through an increasing exchange rate: `rate(t) = rate(0) × e^(APR × t)`
+
+### 3. YieldStrategyManager
+Intelligently manages liquidity by:
+- Maintaining 10-30% liquidity buffer for withdrawals
+- Auto-staking excess liquidity into lending protocol
+- Auto-unstaking when liquidity is needed
+- Rebalancing when deviation exceeds 5%
+
+### 4. FiatSettlementBridge
+Handles token ↔ fiat conversions for merchant settlements:
+- Applies real-time FX rates (from FXServiceMock)
+- 2% FX markup for conversions
+- 0.5% settlement fee
+- Full audit trail for all settlements
+
+**See MODULES.md for detailed documentation and usage examples.**
