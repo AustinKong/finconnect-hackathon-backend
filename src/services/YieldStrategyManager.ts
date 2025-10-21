@@ -1,6 +1,6 @@
 import prisma from '../utils/prisma';
 import lendingProtocol from '../mock/LendingProtocolMock';
-import fiatBridge from './FiatSettlementBridge';
+import fiatBridge from '../mock/FiatSettlementBridge';
 
 /**
  * YieldStrategyManager - Coordinates FiatSettlementBridge and LendingProtocolMock
@@ -87,6 +87,7 @@ export class YieldStrategyManager {
 
       // Step 1: Convert fiat to stablecoin via FiatSettlementBridge
       // This also mints stablecoins into the custody wallet
+      // REMARK: Pretend fiat currency is sent to bridge bank off-chain
       const conversionResult = await fiatBridge.fiatToStablecoin(userId, fiatAmount, currency);
       if (!conversionResult.success || !conversionResult.stablecoinAmount) {
         return { success: false, message: 'Failed to convert fiat to stablecoin' };
