@@ -1,112 +1,125 @@
-import prisma from '../utils/prisma';
-
 /**
- * CustodyStablecoinMock - Stablecoin wallet managing pool balances & exchange rate
+ * CustodyStablecoinMock - Pooled stablecoin wallet with token-level operations
  * 
- * This service acts as a simple stablecoin wallet, managing the pooled token balance
- * and exchange rate from the lending protocol. Individual user shares are managed
- * by YieldStrategyManager.
+ * This service acts strictly as a pooled stablecoin wallet, handling only:
+ * - Token operations: mint, burn, transfer, balance
+ * - Exchange rate tracking (synced from lending protocol)
+ * 
+ * IMPORTANT: Only LendingProtocolMock and FiatSettlementBridge should call mint/burn.
+ * No business logic, staking logic, or user share management should be here.
  */
 export class CustodyStablecoinMock {
-  private custodyWalletId: string | null = null;
+  // In-memory balance representing the pooled stablecoin wallet
+  private pooledBalance: number = 0;
+  
+  // Exchange rate from the lending protocol (1.0 = no yield accrued)
+  private exchangeRate: number = 1.0;
 
   /**
-   * Initialize or get the custody wallet
+   * Mint stablecoins into the pooled wallet
+   * Should only be called by LendingProtocolMock (on deposit) or FiatSettlementBridge (on fiat→stablecoin)
    */
-  async initializeCustodyWallet(): Promise<any> {
+  mint(amount: number): {
+    success: boolean;
+    newBalance?: number;
+    message?: string;
+  } {
     try {
-      // Check if custody wallet already exists
-      let wallet = await prisma.custodyWallet.findFirst();
-
-      if (!wallet) {
-        // Create the first custody wallet
-        wallet = await prisma.custodyWallet.create({
-          data: {
-            totalPoolBalance: 0,
-            totalShares: 0,
-            exchangeRate: 1.0,
-            lastRebalanceAt: new Date()
-          }
-        });
+      if (amount <= 0) {
+        return { success: false, message: 'Mint amount must be positive' };
       }
 
-      this.custodyWalletId = wallet.id;
-      return wallet;
+      this.pooledBalance += amount;
+
+      return {
+        success: true,
+        newBalance: this.pooledBalance
+      };
     } catch (error) {
-      console.error('Initialize custody wallet error:', error);
-      throw error;
+      console.error('Mint error:', error);
+      return { success: false, message: 'Failed to mint tokens' };
     }
   }
 
   /**
-   * Get custody wallet
+   * Burn stablecoins from the pooled wallet
+   * Should only be called by LendingProtocolMock (on withdraw) or FiatSettlementBridge (on stablecoin→fiat)
    */
-  async getCustodyWallet(): Promise<any> {
-    if (!this.custodyWalletId) {
-      return await this.initializeCustodyWallet();
-    }
+  burn(amount: number): {
+    success: boolean;
+    newBalance?: number;
+    message?: string;
+  } {
+    try {
+      if (amount <= 0) {
+        return { success: false, message: 'Burn amount must be positive' };
+      }
 
-    return await prisma.custodyWallet.findUnique({
-      where: { id: this.custodyWalletId }
-    });
+      if (this.pooledBalance < amount) {
+        return { success: false, message: 'Insufficient pooled balance' };
+      }
+
+      this.pooledBalance -= amount;
+
+      return {
+        success: true,
+        newBalance: this.pooledBalance
+      };
+    } catch (error) {
+      console.error('Burn error:', error);
+      return { success: false, message: 'Failed to burn tokens' };
+    }
   }
 
   /**
-   * Update pool balance and shares
-   * Called by YieldStrategyManager when managing user deposits/withdrawals
+   * Transfer stablecoins within the pool (for internal operations if needed)
    */
-  async updatePoolBalance(balanceDelta: number, sharesDelta: number): Promise<{
+  transfer(amount: number): {
     success: boolean;
     message?: string;
-  }> {
+  } {
     try {
-      const wallet = await this.getCustodyWallet();
-      
-      const newBalance = wallet.totalPoolBalance + balanceDelta;
-      const newShares = wallet.totalShares + sharesDelta;
-
-      if (newBalance < 0 || newShares < 0) {
-        return { success: false, message: 'Invalid balance or shares update' };
+      if (amount <= 0) {
+        return { success: false, message: 'Transfer amount must be positive' };
       }
 
-      await prisma.custodyWallet.update({
-        where: { id: wallet.id },
-        data: {
-          totalPoolBalance: newBalance,
-          totalShares: newShares
-        }
-      });
+      if (this.pooledBalance < amount) {
+        return { success: false, message: 'Insufficient pooled balance' };
+      }
+
+      // For now, transfer is a no-op since we have a single pooled balance
+      // This can be extended in the future if we need to track sub-accounts
 
       return { success: true };
     } catch (error) {
-      console.error('Update pool balance error:', error);
-      return { success: false, message: 'Failed to update pool balance' };
+      console.error('Transfer error:', error);
+      return { success: false, message: 'Failed to transfer tokens' };
     }
+  }
+
+  /**
+   * Get the current pooled balance
+   */
+  getBalance(): number {
+    return this.pooledBalance;
   }
 
   /**
    * Update exchange rate from lending protocol
    * This should be called when the lending protocol accrues interest
    */
-  async updateExchangeRate(newExchangeRate: number): Promise<{
+  updateExchangeRate(newExchangeRate: number): {
     success: boolean;
     oldRate?: number;
     newRate?: number;
-  }> {
+  } {
     try {
       if (newExchangeRate <= 0) {
         return { success: false };
       }
 
-      const wallet = await this.getCustodyWallet();
-      const oldRate = wallet.exchangeRate;
-
-      await prisma.custodyWallet.update({
-        where: { id: wallet.id },
-        data: {
-          exchangeRate: newExchangeRate
-        }
-      });
+      const oldRate = this.exchangeRate;
+      this.exchangeRate = newExchangeRate;
 
       return {
         success: true,
@@ -122,39 +135,21 @@ export class CustodyStablecoinMock {
   /**
    * Get current exchange rate
    */
-  async getExchangeRate(): Promise<number> {
-    const wallet = await this.getCustodyWallet();
-    return wallet.exchangeRate;
+  getExchangeRate(): number {
+    return this.exchangeRate;
   }
 
   /**
-   * Get total pool statistics
+   * Get wallet statistics (for monitoring/debugging)
    */
-  async getPoolStats(): Promise<{
-    success: boolean;
-    stats?: {
-      totalPoolBalance: number;
-      totalShares: number;
-      exchangeRate: number;
-      lastRebalanceAt: Date;
+  getStats(): {
+    pooledBalance: number;
+    exchangeRate: number;
+  } {
+    return {
+      pooledBalance: this.pooledBalance,
+      exchangeRate: this.exchangeRate
     };
-  }> {
-    try {
-      const wallet = await this.getCustodyWallet();
-
-      return {
-        success: true,
-        stats: {
-          totalPoolBalance: wallet.totalPoolBalance,
-          totalShares: wallet.totalShares,
-          exchangeRate: wallet.exchangeRate,
-          lastRebalanceAt: wallet.lastRebalanceAt
-        }
-      };
-    } catch (error) {
-      console.error('Get pool stats error:', error);
-      return { success: false };
-    }
   }
 }
 

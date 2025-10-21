@@ -1,10 +1,16 @@
 import prisma from '../utils/prisma';
+import custodyWallet from './CustodyStablecoinMock';
 
 /**
  * LendingProtocolMock - Simulates Aave yield via APR → exchangeRate
  * 
- * This service simulates a lending protocol like Aave where deposits earn yield.
- * The yield is represented through an increasing exchange rate that compounds over time.
+ * This service acts purely as a lending protocol simulator:
+ * - Maintains APR→exchangeRate evolution
+ * - Tracks user shares and yield accrual
+ * - On deposit: calls CustodyStablecoinMock.mint() to add tokens to pooled wallet
+ * - On withdraw: calls CustodyStablecoinMock.burn() to remove tokens from pooled wallet
+ * 
+ * NO direct wallet edits or fiat operations.
  */
 export class LendingProtocolMock {
   private protocolId: string | null = null;
@@ -62,6 +68,11 @@ export class LendingProtocolMock {
   /**
    * Deposit tokens into the lending protocol
    * Returns shares based on current exchange rate
+   * 
+   * On deposit, this method:
+   * 1. Mints tokens into CustodyStablecoinMock (pooled wallet)
+   * 2. Issues shares to the depositor based on current exchange rate
+   * 3. Tracks the deposit in the lending protocol
    */
   async deposit(amount: number): Promise<{
     success: boolean;
@@ -76,10 +87,16 @@ export class LendingProtocolMock {
 
       const protocol = await this.getProtocol();
 
-      // Calculate shares: amount / exchangeRate
+      // Step 1: Mint tokens into the pooled custody wallet
+      const mintResult = custodyWallet.mint(amount);
+      if (!mintResult.success) {
+        return { success: false, message: 'Failed to mint tokens into custody wallet' };
+      }
+
+      // Step 2: Calculate shares: amount / exchangeRate
       const shares = amount / protocol.exchangeRate;
 
-      // Update protocol totals
+      // Step 3: Update protocol totals
       await prisma.lendingProtocol.update({
         where: { id: protocol.id },
         data: {
@@ -87,7 +104,7 @@ export class LendingProtocolMock {
         }
       });
 
-      // Record the deposit
+      // Step 4: Record the deposit
       await prisma.lendingDeposit.create({
         data: {
           protocolId: protocol.id,
@@ -111,6 +128,11 @@ export class LendingProtocolMock {
   /**
    * Withdraw tokens from the lending protocol
    * Burns shares and returns tokens based on current exchange rate
+   * 
+   * On withdraw, this method:
+   * 1. Burns shares and calculates token amount
+   * 2. Burns tokens from CustodyStablecoinMock (pooled wallet)
+   * 3. Updates protocol totals
    */
   async withdraw(shares: number): Promise<{
     success: boolean;
@@ -125,14 +147,20 @@ export class LendingProtocolMock {
 
       const protocol = await this.getProtocol();
 
-      // Calculate token amount: shares * exchangeRate
+      // Step 1: Calculate token amount: shares * exchangeRate
       const amount = shares * protocol.exchangeRate;
 
       if (protocol.totalDeposited < amount) {
         return { success: false, message: 'Insufficient protocol balance' };
       }
 
-      // Update protocol totals
+      // Step 2: Burn tokens from the pooled custody wallet
+      const burnResult = custodyWallet.burn(amount);
+      if (!burnResult.success) {
+        return { success: false, message: 'Failed to burn tokens from custody wallet' };
+      }
+
+      // Step 3: Update protocol totals
       await prisma.lendingProtocol.update({
         where: { id: protocol.id },
         data: {
@@ -154,6 +182,7 @@ export class LendingProtocolMock {
   /**
    * Accrue interest and update exchange rate
    * This simulates the passage of time and compound interest
+   * Also syncs the exchange rate to CustodyStablecoinMock
    */
   async accrueInterest(): Promise<{
     success: boolean;
@@ -197,6 +226,9 @@ export class LendingProtocolMock {
           lastAccrualAt: now
         }
       });
+
+      // Sync exchange rate to custody wallet
+      custodyWallet.updateExchangeRate(newRate);
 
       return {
         success: true,

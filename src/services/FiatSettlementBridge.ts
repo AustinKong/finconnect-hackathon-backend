@@ -1,11 +1,17 @@
 import prisma from '../utils/prisma';
 import fxService from '../mock/FXServiceMock';
+import custodyWallet from '../mock/CustodyStablecoinMock';
 
 /**
- * FiatSettlementBridge - Converts tokens ↔ fiat for merchant settlement via FX + fees
+ * FiatSettlementBridge - Handles fiat ↔ stablecoin conversion
  * 
- * This service handles the conversion between tokens (USDC) and fiat currencies
- * for merchant settlements, applying foreign exchange rates and settlement fees.
+ * This service converts between fiat currencies and stablecoins:
+ * - Always calls CustodyStablecoinMock.mint() when converting fiat → stablecoin
+ * - Always calls CustodyStablecoinMock.burn() when converting stablecoin → fiat
+ * - For prototype: manually credits/debits wallet fiat (no real bank account integration)
+ * - Applies optional FX rates and settlement fees
+ * 
+ * IMPORTANT: No lending logic should be here.
  */
 export class FiatSettlementBridge {
   private fxMarkup: number;
@@ -19,12 +25,130 @@ export class FiatSettlementBridge {
   }
 
   /**
-   * Convert tokens to fiat for merchant settlement
-   * Used when paying merchants in their local currency
+   * Convert fiat to stablecoins for user deposits
+   * 
+   * PROTOTYPE BEHAVIOR: This manually credits the user's wallet with fiat amount,
+   * then mints the equivalent stablecoins. In production, this would debit from
+   * a real bank account before minting.
+   * 
+   * Flow:
+   * 1. Apply FX conversion (with markup) and settlement fees
+   * 2. [PROTOTYPE] Manually credit user wallet with fiat (skip real bank debit)
+   * 3. Mint stablecoins into custody wallet
+   * 4. Record the settlement
    */
-  async tokenToFiat(
-    merchantId: string,
-    tokenAmount: number,
+  async fiatToStablecoin(
+    userId: string,
+    fiatAmount: number,
+    sourceCurrency: string
+  ): Promise<{
+    success: boolean;
+    stablecoinAmount?: number;
+    fxRate?: number;
+    settlementFee?: number;
+    settlementId?: string;
+    message?: string;
+  }> {
+    try {
+      if (fiatAmount <= 0) {
+        return { success: false, message: 'Fiat amount must be positive' };
+      }
+
+      // Verify user exists
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { wallet: true }
+      });
+
+      if (!user) {
+        return { success: false, message: 'User not found' };
+      }
+
+      // Get FX rate from source currency to USD (stablecoins are USDC = USD)
+      const fxRate = fxService.getRate(sourceCurrency, 'USD');
+
+      // Apply FX markup (inverse for fiat to stablecoin)
+      const effectiveFxRate = fxRate / (1 + this.fxMarkup);
+
+      // Calculate stablecoin amount before fee
+      const stablecoinAmountBeforeFee = fiatAmount * effectiveFxRate;
+
+      // Calculate settlement fee in stablecoins
+      const settlementFee = stablecoinAmountBeforeFee * this.settlementFeeRate;
+
+      // Final stablecoin amount after fee
+      const finalStablecoinAmount = stablecoinAmountBeforeFee - settlementFee;
+
+      // PROTOTYPE: Manually credit user wallet with fiat
+      // NOTE: In production, this would debit from a real bank account
+      if (!user.wallet) {
+        // Create wallet if it doesn't exist
+        await prisma.wallet.create({
+          data: {
+            userId,
+            balance: fiatAmount
+          }
+        });
+      } else {
+        await prisma.wallet.update({
+          where: { userId },
+          data: {
+            balance: user.wallet.balance + fiatAmount
+          }
+        });
+      }
+
+      // Mint stablecoins into custody wallet
+      const mintResult = custodyWallet.mint(finalStablecoinAmount);
+      if (!mintResult.success) {
+        return { success: false, message: 'Failed to mint stablecoins' };
+      }
+
+      // Create settlement record
+      const settlement = await prisma.fiatSettlement.create({
+        data: {
+          merchantId: userId, // Using userId as merchantId for user settlements
+          settlementType: 'FIAT_TO_TOKEN',
+          tokenAmount: finalStablecoinAmount,
+          fiatAmount,
+          fiatCurrency: sourceCurrency,
+          fxRate: effectiveFxRate,
+          fxMarkup: this.fxMarkup,
+          settlementFee,
+          status: 'COMPLETED',
+          settledAt: new Date()
+        }
+      });
+
+      return {
+        success: true,
+        stablecoinAmount: finalStablecoinAmount,
+        fxRate: effectiveFxRate,
+        settlementFee,
+        settlementId: settlement.id
+      };
+    } catch (error) {
+      console.error('Fiat to stablecoin conversion error:', error);
+      return { success: false, message: 'Fiat to stablecoin conversion failed' };
+    }
+  }
+
+  /**
+   * Convert stablecoins to fiat for user withdrawals
+   * 
+   * PROTOTYPE BEHAVIOR: This burns the stablecoins, then manually debits the
+   * user's wallet with the fiat amount. In production, this would credit to
+   * a real bank account after burning.
+   * 
+   * Flow:
+   * 1. Apply FX conversion (with markup) and settlement fees
+   * 2. Burn stablecoins from custody wallet
+   * 3. [PROTOTYPE] Manually debit user wallet with fiat (skip real bank credit)
+   * 4. Record the settlement
+   */
+  async stablecoinToFiat(
+    userId: string,
+    stablecoinAmount: number,
     targetCurrency: string
   ): Promise<{
     success: boolean;
@@ -35,40 +159,66 @@ export class FiatSettlementBridge {
     message?: string;
   }> {
     try {
-      if (tokenAmount <= 0) {
-        return { success: false, message: 'Token amount must be positive' };
+      if (stablecoinAmount <= 0) {
+        return { success: false, message: 'Stablecoin amount must be positive' };
       }
 
-      // Verify merchant exists
-      const merchant = await prisma.merchant.findUnique({
-        where: { id: merchantId }
+      // Verify user exists
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { wallet: true }
       });
 
-      if (!merchant) {
-        return { success: false, message: 'Merchant not found' };
+      if (!user) {
+        return { success: false, message: 'User not found' };
       }
 
-      // Get FX rate from USD (tokens are USDC = USD) to target currency
+      // Get FX rate from USD (stablecoins are USDC = USD) to target currency
       const fxRate = fxService.getRate('USD', targetCurrency);
 
       // Apply FX markup
       const effectiveFxRate = fxRate * (1 + this.fxMarkup);
 
-      // Calculate fiat amount
-      const fiatAmountBeforeFee = tokenAmount * effectiveFxRate;
+      // Calculate fiat amount before fee
+      const fiatAmountBeforeFee = stablecoinAmount * effectiveFxRate;
 
-      // Calculate settlement fee
+      // Calculate settlement fee in fiat
       const settlementFee = fiatAmountBeforeFee * this.settlementFeeRate;
 
       // Final fiat amount after fee
       const finalFiatAmount = fiatAmountBeforeFee - settlementFee;
 
+      // Burn stablecoins from custody wallet
+      const burnResult = custodyWallet.burn(stablecoinAmount);
+      if (!burnResult.success) {
+        return { success: false, message: 'Failed to burn stablecoins' };
+      }
+
+      // PROTOTYPE: Manually debit user wallet with fiat
+      // NOTE: In production, this would credit to a real bank account
+      if (!user.wallet) {
+        return { success: false, message: 'User wallet not found' };
+      }
+
+      if (user.wallet.balance < finalFiatAmount) {
+        // Rollback the burn by minting back
+        custodyWallet.mint(stablecoinAmount);
+        return { success: false, message: 'Insufficient wallet balance' };
+      }
+
+      await prisma.wallet.update({
+        where: { userId },
+        data: {
+          balance: user.wallet.balance - finalFiatAmount
+        }
+      });
+
       // Create settlement record
       const settlement = await prisma.fiatSettlement.create({
         data: {
-          merchantId,
+          merchantId: userId, // Using userId as merchantId for user settlements
           settlementType: 'TOKEN_TO_FIAT',
-          tokenAmount,
+          tokenAmount: stablecoinAmount,
           fiatAmount: finalFiatAmount,
           fiatCurrency: targetCurrency,
           fxRate: effectiveFxRate,
@@ -87,25 +237,28 @@ export class FiatSettlementBridge {
         settlementId: settlement.id
       };
     } catch (error) {
-      console.error('Token to fiat conversion error:', error);
-      return { success: false, message: 'Token to fiat conversion failed' };
+      console.error('Stablecoin to fiat conversion error:', error);
+      return { success: false, message: 'Stablecoin to fiat conversion failed' };
     }
   }
 
   /**
-   * Convert fiat to tokens for merchant deposits
-   * Used when merchants receive fiat and want to convert to tokens
+   * Get a quote for fiat to stablecoin conversion (without executing)
    */
-  async fiatToToken(
-    merchantId: string,
+  async getFiatToStablecoinQuote(
     fiatAmount: number,
     sourceCurrency: string
   ): Promise<{
     success: boolean;
-    tokenAmount?: number;
-    fxRate?: number;
-    settlementFee?: number;
-    settlementId?: string;
+    quote?: {
+      fiatAmount: number;
+      stablecoinAmount: number;
+      sourceCurrency: string;
+      fxRate: number;
+      fxMarkup: number;
+      settlementFee: number;
+      effectiveStablecoinAmount: number;
+    };
     message?: string;
   }> {
     try {
@@ -113,71 +266,43 @@ export class FiatSettlementBridge {
         return { success: false, message: 'Fiat amount must be positive' };
       }
 
-      // Verify merchant exists
-      const merchant = await prisma.merchant.findUnique({
-        where: { id: merchantId }
-      });
-
-      if (!merchant) {
-        return { success: false, message: 'Merchant not found' };
-      }
-
-      // Get FX rate from source currency to USD (tokens are USDC = USD)
       const fxRate = fxService.getRate(sourceCurrency, 'USD');
 
-      // Apply FX markup (inverse for fiat to token)
       const effectiveFxRate = fxRate / (1 + this.fxMarkup);
-
-      // Calculate token amount before fee
-      const tokenAmountBeforeFee = fiatAmount * effectiveFxRate;
-
-      // Calculate settlement fee in tokens
-      const settlementFee = tokenAmountBeforeFee * this.settlementFeeRate;
-
-      // Final token amount after fee
-      const finalTokenAmount = tokenAmountBeforeFee - settlementFee;
-
-      // Create settlement record
-      const settlement = await prisma.fiatSettlement.create({
-        data: {
-          merchantId,
-          settlementType: 'FIAT_TO_TOKEN',
-          tokenAmount: finalTokenAmount,
-          fiatAmount,
-          fiatCurrency: sourceCurrency,
-          fxRate: effectiveFxRate,
-          fxMarkup: this.fxMarkup,
-          settlementFee,
-          status: 'COMPLETED',
-          settledAt: new Date()
-        }
-      });
+      const stablecoinAmountBeforeFee = fiatAmount * effectiveFxRate;
+      const settlementFee = stablecoinAmountBeforeFee * this.settlementFeeRate;
+      const effectiveStablecoinAmount = stablecoinAmountBeforeFee - settlementFee;
 
       return {
         success: true,
-        tokenAmount: finalTokenAmount,
-        fxRate: effectiveFxRate,
-        settlementFee,
-        settlementId: settlement.id
+        quote: {
+          fiatAmount,
+          stablecoinAmount: stablecoinAmountBeforeFee,
+          sourceCurrency,
+          fxRate: effectiveFxRate,
+          fxMarkup: this.fxMarkup,
+          settlementFee,
+          effectiveStablecoinAmount
+        }
       };
     } catch (error) {
-      console.error('Fiat to token conversion error:', error);
-      return { success: false, message: 'Fiat to token conversion failed' };
+      console.error('Get fiat to stablecoin quote error:', error);
+      return { success: false, message: 'Failed to get quote' };
     }
   }
 
   /**
-   * Get a quote for token to fiat conversion (without executing)
+   * Get a quote for stablecoin to fiat conversion (without executing)
    */
-  async getTokenToFiatQuote(
-    tokenAmount: number,
+  async getStablecoinToFiatQuote(
+    stablecoinAmount: number,
     targetCurrency: string
   ): Promise<{
     success: boolean;
     quote?: {
-      tokenAmount: number;
+      stablecoinAmount: number;
       fiatAmount: number;
-      fiatCurrency: string;
+      targetCurrency: string;
       fxRate: number;
       fxMarkup: number;
       settlementFee: number;
@@ -186,23 +311,23 @@ export class FiatSettlementBridge {
     message?: string;
   }> {
     try {
-      if (tokenAmount <= 0) {
-        return { success: false, message: 'Token amount must be positive' };
+      if (stablecoinAmount <= 0) {
+        return { success: false, message: 'Stablecoin amount must be positive' };
       }
 
       const fxRate = fxService.getRate('USD', targetCurrency);
 
       const effectiveFxRate = fxRate * (1 + this.fxMarkup);
-      const fiatAmountBeforeFee = tokenAmount * effectiveFxRate;
+      const fiatAmountBeforeFee = stablecoinAmount * effectiveFxRate;
       const settlementFee = fiatAmountBeforeFee * this.settlementFeeRate;
       const effectiveFiatAmount = fiatAmountBeforeFee - settlementFee;
 
       return {
         success: true,
         quote: {
-          tokenAmount,
+          stablecoinAmount,
           fiatAmount: fiatAmountBeforeFee,
-          fiatCurrency: targetCurrency,
+          targetCurrency,
           fxRate: effectiveFxRate,
           fxMarkup: this.fxMarkup,
           settlementFee,
@@ -210,95 +335,8 @@ export class FiatSettlementBridge {
         }
       };
     } catch (error) {
-      console.error('Get token to fiat quote error:', error);
+      console.error('Get stablecoin to fiat quote error:', error);
       return { success: false, message: 'Failed to get quote' };
-    }
-  }
-
-  /**
-   * Get a quote for fiat to token conversion (without executing)
-   */
-  async getFiatToTokenQuote(
-    fiatAmount: number,
-    sourceCurrency: string
-  ): Promise<{
-    success: boolean;
-    quote?: {
-      fiatAmount: number;
-      tokenAmount: number;
-      sourceCurrency: string;
-      fxRate: number;
-      fxMarkup: number;
-      settlementFee: number;
-      effectiveTokenAmount: number;
-    };
-    message?: string;
-  }> {
-    try {
-      if (fiatAmount <= 0) {
-        return { success: false, message: 'Fiat amount must be positive' };
-      }
-
-      const fxRate = fxService.getRate(sourceCurrency, 'USD');
-
-      const effectiveFxRate = fxRate / (1 + this.fxMarkup);
-      const tokenAmountBeforeFee = fiatAmount * effectiveFxRate;
-      const settlementFee = tokenAmountBeforeFee * this.settlementFeeRate;
-      const effectiveTokenAmount = tokenAmountBeforeFee - settlementFee;
-
-      return {
-        success: true,
-        quote: {
-          fiatAmount,
-          tokenAmount: tokenAmountBeforeFee,
-          sourceCurrency,
-          fxRate: effectiveFxRate,
-          fxMarkup: this.fxMarkup,
-          settlementFee,
-          effectiveTokenAmount
-        }
-      };
-    } catch (error) {
-      console.error('Get fiat to token quote error:', error);
-      return { success: false, message: 'Failed to get quote' };
-    }
-  }
-
-  /**
-   * Get settlement history for a merchant
-   */
-  async getMerchantSettlements(
-    merchantId: string,
-    limit: number = 50
-  ): Promise<{
-    success: boolean;
-    settlements?: any[];
-    message?: string;
-  }> {
-    try {
-      const settlements = await prisma.fiatSettlement.findMany({
-        where: { merchantId },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        include: {
-          merchant: {
-            select: {
-              id: true,
-              name: true,
-              country: true,
-              currency: true
-            }
-          }
-        }
-      });
-
-      return {
-        success: true,
-        settlements
-      };
-    } catch (error) {
-      console.error('Get merchant settlements error:', error);
-      return { success: false, message: 'Failed to get settlements' };
     }
   }
 
@@ -312,10 +350,7 @@ export class FiatSettlementBridge {
   }> {
     try {
       const settlement = await prisma.fiatSettlement.findUnique({
-        where: { id: settlementId },
-        include: {
-          merchant: true
-        }
+        where: { id: settlementId }
       });
 
       if (!settlement) {
@@ -329,78 +364,6 @@ export class FiatSettlementBridge {
     } catch (error) {
       console.error('Get settlement error:', error);
       return { success: false, message: 'Failed to get settlement' };
-    }
-  }
-
-  /**
-   * Get settlement statistics
-   */
-  async getSettlementStats(merchantId?: string): Promise<{
-    success: boolean;
-    stats?: {
-      totalSettlements: number;
-      totalTokenToFiat: number;
-      totalFiatToToken: number;
-      totalFeesCollected: number;
-      currenciesUsed: string[];
-    };
-  }> {
-    try {
-      const where = merchantId ? { merchantId } : {};
-      
-      const settlements = await prisma.fiatSettlement.findMany({
-        where
-      });
-
-      const totalTokenToFiat = settlements
-        .filter(s => s.settlementType === 'TOKEN_TO_FIAT')
-        .length;
-
-      const totalFiatToToken = settlements
-        .filter(s => s.settlementType === 'FIAT_TO_TOKEN')
-        .length;
-
-      const totalFeesCollected = settlements
-        .reduce((sum, s) => sum + s.settlementFee, 0);
-
-      const currenciesUsed = [...new Set(settlements.map(s => s.fiatCurrency))];
-
-      return {
-        success: true,
-        stats: {
-          totalSettlements: settlements.length,
-          totalTokenToFiat,
-          totalFiatToToken,
-          totalFeesCollected,
-          currenciesUsed
-        }
-      };
-    } catch (error) {
-      console.error('Get settlement stats error:', error);
-      return { success: false };
-    }
-  }
-
-  /**
-   * Update settlement status (for pending settlements)
-   */
-  async updateSettlementStatus(
-    settlementId: string,
-    status: 'PENDING' | 'COMPLETED' | 'FAILED'
-  ): Promise<{ success: boolean; message?: string }> {
-    try {
-      await prisma.fiatSettlement.update({
-        where: { id: settlementId },
-        data: {
-          status,
-          settledAt: status === 'COMPLETED' ? new Date() : null
-        }
-      });
-
-      return { success: true };
-    } catch (error) {
-      console.error('Update settlement status error:', error);
-      return { success: false, message: 'Failed to update settlement status' };
     }
   }
 
