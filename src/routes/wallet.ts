@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import prisma from '../utils/prisma';
-import stablecoinAdapter from '../services/StablecoinYieldAdapterMock';
+import yieldManager from '../services/YieldManager';
 import walletService from '../services/WalletService';
 
 const router = Router();
@@ -31,7 +31,7 @@ router.get('/:userId', async (req, res) => {
 
     res.json({
       wallet,
-      yieldRate: stablecoinAdapter.getYieldRate()
+      yieldRate: yieldManager.getYieldRate()
     });
   } catch (error) {
     console.error('Get wallet error:', error);

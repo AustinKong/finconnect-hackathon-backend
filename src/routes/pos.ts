@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import prisma from '../utils/prisma';
 import visaNetwork from '../mock/VisaNetworkMock';
-import stablecoinAdapter from '../services/StablecoinYieldAdapterMock';
+import yieldManager from '../services/YieldManager';
 import missionEngine from '../services/MissionEngine';
 import fxService from '../mock/FXServiceMock';
 import walletService from '../services/WalletService';
@@ -57,7 +57,7 @@ router.post('/authorize', async (req, res) => {
     // Check if we need to auto-unstake
     let autoUnstakeResult = null;
     if (wallet.balance < finalAmount && wallet.stakedAmount > 0) {
-      const unstakeResult = await stablecoinAdapter.autoUnstake(userId, finalAmount);
+      const unstakeResult = await yieldManager.autoUnstake(userId, finalAmount);
       
       if (!unstakeResult.success) {
         return res.status(400).json({
