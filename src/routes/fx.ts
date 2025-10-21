@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import fxService from '../services/FXService';
+import fxService from '../services/FXServiceMock';
 
 const router = Router();
 

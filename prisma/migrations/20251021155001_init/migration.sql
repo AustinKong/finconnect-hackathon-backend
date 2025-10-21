@@ -80,17 +80,6 @@ CREATE TABLE "UserMission" (
     CONSTRAINT "UserMission_missionId_fkey" FOREIGN KEY ("missionId") REFERENCES "Mission" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
--- CreateTable
-CREATE TABLE "ExchangeRate" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "fromCurrency" TEXT NOT NULL,
-    "toCurrency" TEXT NOT NULL,
-    "rate" REAL NOT NULL,
-    "markup" REAL NOT NULL DEFAULT 0.02,
-    "updatedAt" DATETIME NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
@@ -99,6 +88,3 @@ CREATE UNIQUE INDEX "Wallet_userId_key" ON "Wallet"("userId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "UserMission_userId_missionId_key" ON "UserMission"("userId", "missionId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "ExchangeRate_fromCurrency_toCurrency_key" ON "ExchangeRate"("fromCurrency", "toCurrency");

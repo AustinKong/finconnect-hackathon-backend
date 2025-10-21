@@ -3,7 +3,7 @@ import prisma from '../utils/prisma';
 import visaNetwork from '../services/VisaNetworkMock';
 import stablecoinAdapter from '../services/StablecoinYieldAdapterMock';
 import missionEngine from '../services/MissionEngine';
-import fxService from '../services/FXService';
+import fxService from '../services/FXServiceMock';
 
 const router = Router();
 

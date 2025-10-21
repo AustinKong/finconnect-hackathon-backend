@@ -304,33 +304,6 @@ async function main() {
 
   console.log(`✅ Created ${createdMissions.length} missions`);
 
-  // Create some exchange rates
-  const exchangeRates = [
-    { fromCurrency: 'USD', toCurrency: 'EUR', rate: 0.93, markup: 0.02 },
-    { fromCurrency: 'EUR', toCurrency: 'USD', rate: 1.08, markup: 0.02 },
-    { fromCurrency: 'USD', toCurrency: 'GBP', rate: 0.80, markup: 0.02 },
-    { fromCurrency: 'GBP', toCurrency: 'USD', rate: 1.25, markup: 0.02 },
-    { fromCurrency: 'USD', toCurrency: 'JPY', rate: 149.50, markup: 0.02 },
-    { fromCurrency: 'JPY', toCurrency: 'USD', rate: 0.0067, markup: 0.02 },
-    { fromCurrency: 'USD', toCurrency: 'SGD', rate: 1.35, markup: 0.02 },
-    { fromCurrency: 'SGD', toCurrency: 'USD', rate: 0.74, markup: 0.02 }
-  ];
-
-  for (const rate of exchangeRates) {
-    await prisma.exchangeRate.upsert({
-      where: {
-        fromCurrency_toCurrency: {
-          fromCurrency: rate.fromCurrency,
-          toCurrency: rate.toCurrency
-        }
-      },
-      update: rate,
-      create: rate
-    });
-  }
-
-  console.log(`✅ Created ${exchangeRates.length} exchange rates`);
-
   // Enroll users in missions (sample enrollments)
   const assignments = [
     { user: user1, missionId: 'eiffel-souvenir-spree', progress: 20, isCompleted: false },

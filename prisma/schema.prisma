@@ -93,15 +93,3 @@ model UserMission {
 
   @@unique([userId, missionId])
 }
-
-model ExchangeRate {
-  id              String   @id @default(uuid())
-  fromCurrency    String
-  toCurrency      String
-  rate            Float
-  markup          Float    @default(0.02) // 2% markup by default
-  updatedAt       DateTime @updatedAt
-  createdAt       DateTime @default(now())
-
-  @@unique([fromCurrency, toCurrency])
-}
