@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import prisma from '../utils/prisma';
 import stablecoinAdapter from '../services/StablecoinYieldAdapterMock';
+import walletService from '../services/WalletService';
 
 const router = Router();
 
@@ -54,56 +55,30 @@ router.post('/topup', async (req, res) => {
     }
 
     // Get or create wallet
-    let wallet = await prisma.wallet.findUnique({
-      where: { userId }
+    const wallet = await walletService.getOrCreateWallet(userId);
+
+    // Add funds (will auto-stake if enabled)
+    const result = await walletService.addFunds(userId, amount, {
+      description: `Wallet top-up of ${amount} ${currency}`,
+      transactionType: 'TOPUP',
+      currency
     });
 
-    if (!wallet) {
-      // Check if user exists
-      const user = await prisma.user.findUnique({
-        where: { id: userId }
-      });
-
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      // Create wallet
-      wallet = await prisma.wallet.create({
-        data: {
-          userId,
-          balance: 0,
-          stakedAmount: 0,
-          yieldEarned: 0
-        }
-      });
+    if (!result.success) {
+      return res.status(400).json({ error: result.message });
     }
 
-    // Update wallet balance
-    const updatedWallet = await prisma.wallet.update({
-      where: { userId },
-      data: {
-        balance: wallet.balance + amount
-      }
-    });
-
-    // Record transaction
-    const transaction = await prisma.transaction.create({
-      data: {
-        userId,
-        type: 'TOPUP',
-        amount,
-        currency,
-        description: `Wallet top-up of ${amount} ${currency}`,
-        status: 'COMPLETED'
-      }
-    });
-
-    res.json({
+    const response: any = {
       success: true,
-      wallet: updatedWallet,
-      transaction
-    });
+      wallet: result.wallet
+    };
+
+    if (result.autoStaked) {
+      response.autoStaked = result.autoStaked;
+      response.message = `Funds automatically staked: ${result.autoStaked} ${currency}`;
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('Top-up error:', error);
     res.status(500).json({ error: 'Failed to top up wallet' });
@@ -207,6 +182,35 @@ router.get('/:userId/transactions', async (req, res) => {
   } catch (error) {
     console.error('Get transactions error:', error);
     res.status(500).json({ error: 'Failed to get transactions' });
+  }
+});
+
+/**
+ * PUT /wallet/:userId/autostake - Update auto-stake setting
+ */
+router.put('/:userId/autostake', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { autoStake } = req.body;
+
+    if (typeof autoStake !== 'boolean') {
+      return res.status(400).json({ error: 'autoStake must be a boolean' });
+    }
+
+    const result = await walletService.updateAutoStake(userId, autoStake);
+
+    if (!result.success) {
+      return res.status(404).json({ error: result.message });
+    }
+
+    res.json({
+      success: true,
+      wallet: result.wallet,
+      message: `Auto-staking ${autoStake ? 'enabled' : 'disabled'}`
+    });
+  } catch (error) {
+    console.error('Update autostake error:', error);
+    res.status(500).json({ error: 'Failed to update autostake setting' });
   }
 });
 
