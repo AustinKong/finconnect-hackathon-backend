@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(uuid())
+  email         String        @unique
+  name          String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  wallet        Wallet?
+  transactions  Transaction[]
+  missions      UserMission[]
+}
+
+model Wallet {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+  balance         Float    @default(0)
+  stakedAmount    Float    @default(0)
+  yieldEarned     Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Transaction {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  type            String   // TOPUP, PURCHASE, STAKE, UNSTAKE, YIELD
+  amount          Float
+  currency        String   @default("USD")
+  merchantId      String?
+  merchant        Merchant? @relation(fields: [merchantId], references: [id])
+  description     String?
+  status          String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
+  metadata        String?  // JSON string for additional data
+  createdAt       DateTime @default(now())
+}
+
+model Merchant {
+  id              String        @id @default(uuid())
+  name            String
+  category        String
+  country         String
+  currency        String        @default("USD")
+  mcc             String        // Merchant Category Code
+  createdAt       DateTime      @default(now())
+  transactions    Transaction[]
+  missions        Mission[]
+}
+
+model Mission {
+  id              String        @id @default(uuid())
+  title           String
+  description     String
+  type            String        // SPEND_CATEGORY, SPEND_MERCHANT, SPEND_AMOUNT, MULTI_COUNTRY
+  targetValue     Float?        // Target amount or count
+  targetCategory  String?
+  targetMerchantId String?
+  targetMerchant  Merchant?     @relation(fields: [targetMerchantId], references: [id])
+  rewardAmount    Float
+  rewardType      String        @default("CASHBACK") // CASHBACK, POINTS, YIELD_BOOST
+  startDate       DateTime      @default(now())
+  endDate         DateTime?
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  userMissions    UserMission[]
+}
+
+model UserMission {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  missionId       String
+  mission         Mission  @relation(fields: [missionId], references: [id])
+  progress        Float    @default(0)
+  isCompleted     Boolean  @default(false)
+  completedAt     DateTime?
+  rewardClaimed   Boolean  @default(false)
+  claimedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, missionId])
+}
+
+model ExchangeRate {
+  id              String   @id @default(uuid())
+  fromCurrency    String
+  toCurrency      String
+  rate            Float
+  markup          Float    @default(0.02) // 2% markup by default
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  @@unique([fromCurrency, toCurrency])
+}
