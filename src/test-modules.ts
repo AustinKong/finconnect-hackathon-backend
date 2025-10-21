@@ -38,24 +38,19 @@ async function testModules() {
     console.log(`   FX markup: ${rates.fxMarkup * 100}%`);
     console.log(`   Settlement fee: ${rates.settlementFeeRate * 100}%\n`);
 
-    // Test 5: Integration test - deposit flow
-    console.log('5️⃣ Testing integrated deposit flow...');
+    // Test 5: Integration test - deposit flow with fiat
+    console.log('5️⃣ Testing integrated deposit flow with fiat...');
     const testUserId = 'test-user-123';
     
-    // Deposit 1000 USDC via yield strategy (which manages user shares)
-    const depositResult = await yieldStrategy.deposit(testUserId, 1000);
-    console.log(`✅ User deposited 1000 USDC, received ${depositResult.shares?.toFixed(2)} shares`);
-
-    // Check if rebalancing is needed
-    const rebalanceCheck = await yieldStrategy.shouldRebalance();
-    console.log(`   Should rebalance: ${rebalanceCheck.shouldRebalance}`);
-    if (rebalanceCheck.reason) {
-      console.log(`   Reason: ${rebalanceCheck.reason}`);
-    }
+    // Deposit 1000 USD via yield strategy (fiat → stablecoin → lending protocol)
+    const depositResult = await yieldStrategy.deposit(testUserId, 1000, 'USD');
+    console.log(`✅ User deposited 1000 USD, received ${depositResult.shares?.toFixed(2)} shares`);
+    console.log(`   Token amount: ${depositResult.tokenAmount?.toFixed(2)} USDC`);
+    console.log(`   FX rate: ${depositResult.fxRate?.toFixed(4)}`);
 
     // Get user balance from yield strategy
-    const balance = await yieldStrategy.getUserBalance(testUserId);
-    console.log(`✅ User balance: ${balance.tokenBalance?.toFixed(2)} USDC (${balance.shares?.toFixed(2)} shares)\n`);
+    const balance = await yieldStrategy.getUserBalance(testUserId, 'USD');
+    console.log(`✅ User balance: ${balance.tokenBalance?.toFixed(2)} USDC (${balance.fiatBalance?.toFixed(2)} USD, ${balance.shares?.toFixed(2)} shares)\n`);
 
     // Test 6: Get a settlement quote
     console.log('6️⃣ Testing settlement quote...');
@@ -87,10 +82,42 @@ async function testModules() {
 
     if (strategyStats.success && strategyStats.stats) {
       console.log(`✅ Strategy stats:`);
-      console.log(`   Current liquidity: ${strategyStats.stats.currentLiquidity.toFixed(2)} USDC`);
       console.log(`   Total staked: ${strategyStats.stats.totalStaked.toFixed(2)} USDC`);
-      console.log(`   Liquidity ratio: ${(strategyStats.stats.liquidityRatio * 100).toFixed(2)}%`);
+      console.log(`   Exchange rate: ${strategyStats.stats.exchangeRate.toFixed(6)}`);
       console.log(`   Total users: ${strategyStats.stats.totalUsers}\n`);
+    }
+
+    // Test 8: Test withdrawal flow with fiat
+    console.log('8️⃣ Testing withdrawal flow with fiat...');
+    
+    // Check if user has sufficient balance
+    const balanceCheck = await yieldStrategy.hasSufficientBalance(testUserId, 100, 'USD');
+    console.log(`✅ Sufficient balance check: ${balanceCheck.hasSufficient} (has ${balanceCheck.currentBalance?.toFixed(2)} USD, needs 100 USD)`);
+    
+    if (balanceCheck.hasSufficient) {
+      // Withdraw 100 USD
+      const withdrawResult = await yieldStrategy.withdraw(testUserId, 100, 'USD');
+      console.log(`✅ User withdrew ${withdrawResult.fiatAmount?.toFixed(2)} USD, burned ${withdrawResult.shares?.toFixed(2)} shares`);
+      console.log(`   Token amount: ${withdrawResult.tokenAmount?.toFixed(2)} USDC`);
+      
+      // Check balance after withdrawal
+      const balanceAfter = await yieldStrategy.getUserBalance(testUserId, 'USD');
+      console.log(`✅ Balance after withdrawal: ${balanceAfter.tokenBalance?.toFixed(2)} USDC (${balanceAfter.fiatBalance?.toFixed(2)} USD, ${balanceAfter.shares?.toFixed(2)} shares)\n`);
+    }
+
+    // Test 9: Test yield synchronization
+    console.log('9️⃣ Testing yield synchronization...');
+    
+    // Sync yield from lending protocol
+    const syncResult = await yieldStrategy.syncYield();
+    if (syncResult.success) {
+      console.log(`✅ Yield synchronized successfully`);
+      console.log(`   Exchange rate: ${syncResult.exchangeRate?.toFixed(6)}`);
+      console.log(`   Interest earned: ${syncResult.interestEarned?.toFixed(2)} USDC`);
+      
+      // Check updated balance after yield accrual
+      const balanceAfterYield = await yieldStrategy.getUserBalance(testUserId, 'USD');
+      console.log(`✅ Balance after yield: ${balanceAfterYield.tokenBalance?.toFixed(2)} USDC (${balanceAfterYield.fiatBalance?.toFixed(2)} USD)\n`);
     }
 
     console.log('✅ All tests passed! Modules are working correctly.\n');
