@@ -2,15 +2,20 @@ import { Router } from 'express';
 import prisma from '../utils/prisma';
 import yieldManager from '../services/YieldManager';
 import walletService from '../services/WalletService';
+import { requireAuthMiddleware, getUserId } from '../middleware/clerkAuth';
 
 const router = Router();
 
 /**
- * GET /wallet/:userId - Get wallet details
+ * GET /wallet - Get wallet details for authenticated user
  */
-router.get('/:userId', async (req, res) => {
+router.get('/', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = getUserId(req);
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     const wallet = await prisma.wallet.findUnique({
       where: { userId },
@@ -42,13 +47,19 @@ router.get('/:userId', async (req, res) => {
 /**
  * POST /wallet/topup - Top up wallet balance
  * Simulates adding funds to the wallet
+ * Uses authenticated user ID from Clerk
  */
-router.post('/topup', async (req, res) => {
+router.post('/topup', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId, amount, currency = 'USD' } = req.body;
+    const userId = getUserId(req);
+    const { amount, currency = 'USD' } = req.body;
 
-    if (!userId || !amount) {
-      return res.status(400).json({ error: 'userId and amount are required' });
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!amount) {
+      return res.status(400).json({ error: 'amount is required' });
     }
 
     if (amount <= 0) {
@@ -87,12 +98,16 @@ router.post('/topup', async (req, res) => {
 });
 
 /**
- * GET /wallet/:userId/transactions - Get wallet transactions
+ * GET /wallet/transactions - Get wallet transactions for authenticated user
  */
-router.get('/:userId/transactions', async (req, res) => {
+router.get('/transactions', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = getUserId(req);
     const { limit = '50', offset = '0' } = req.query;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     const transactions = await prisma.transaction.findMany({
       where: { userId },
@@ -123,12 +138,16 @@ router.get('/:userId/transactions', async (req, res) => {
 });
 
 /**
- * PUT /wallet/:userId/autostake - Update auto-stake setting
+ * PUT /wallet/autostake - Update auto-stake setting for authenticated user
  */
-router.put('/:userId/autostake', async (req, res) => {
+router.put('/autostake', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = getUserId(req);
     const { autoStake } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     if (typeof autoStake !== 'boolean') {
       return res.status(400).json({ error: 'autoStake must be a boolean' });
@@ -152,12 +171,16 @@ router.put('/:userId/autostake', async (req, res) => {
 });
 
 /**
- * POST /wallet/:userId/cards - Issue a new card
+ * POST /wallet/cards - Issue a new card for authenticated user
  */
-router.post('/:userId/cards', async (req, res) => {
+router.post('/cards', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = getUserId(req);
     const { cardholderName } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     if (!cardholderName) {
       return res.status(400).json({ error: 'cardholderName is required' });
@@ -218,11 +241,15 @@ router.post('/:userId/cards', async (req, res) => {
 });
 
 /**
- * GET /wallet/:userId/cards - Get all cards for a wallet
+ * GET /wallet/cards - Get all cards for authenticated user's wallet
  */
-router.get('/:userId/cards', async (req, res) => {
+router.get('/cards', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     // Get wallet
     const wallet = await prisma.wallet.findUnique({
@@ -251,11 +278,16 @@ router.get('/:userId/cards', async (req, res) => {
 });
 
 /**
- * GET /wallet/:userId/cards/:cardId - Get card details
+ * GET /wallet/cards/:cardId - Get card details for authenticated user
  */
-router.get('/:userId/cards/:cardId', async (req, res) => {
+router.get('/cards/:cardId', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId, cardId } = req.params;
+    const userId = getUserId(req);
+    const { cardId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     // Get wallet
     const wallet = await prisma.wallet.findUnique({

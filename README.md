@@ -17,6 +17,7 @@ A TypeScript + Express backend for GlobeTrotter+, a travel rewards and payments 
 - **Runtime**: Node.js with TypeScript
 - **Framework**: Express.js
 - **Database**: SQLite with Prisma ORM
+- **Authentication**: Clerk for secure user authentication
 - **Environment**: dotenv for configuration
 
 ## Project Structure
@@ -75,21 +76,24 @@ A TypeScript + Express backend for GlobeTrotter+, a travel rewards and payments 
    - Run database migrations
    - Seed initial data (2 users, 10 merchants, 2 missions)
 
-4. **Configure environment variables** (optional)
+4. **Configure environment variables**
    
-   Copy `.env.example` to `.env` and modify if needed:
+   Copy `.env.example` to `.env` and configure:
    ```bash
    cp .env.example .env
    ```
    
-   Default configuration:
+   Required configuration:
    ```env
    DATABASE_URL="file:./dev.db"
    PORT=3000
    NODE_ENV=development
    STABLECOIN_YIELD_RATE=0.05
    VISA_PROCESSING_FEE=0.029
+   CLERK_SECRET_KEY=your_clerk_secret_key_here
    ```
+   
+   **Note**: Get your Clerk secret key from the [Clerk Dashboard](https://dashboard.clerk.com). In test mode, authentication is bypassed for easier testing.
 
 ### Running the Application
 
@@ -118,19 +122,49 @@ Expected response:
 {"status":"ok","timestamp":"2024-10-22T09:57:00.000Z"}
 ```
 
+## Authentication
+
+This API uses [Clerk](https://clerk.com) for authentication. Protected endpoints require a valid Clerk session token.
+
+### Using Protected Endpoints
+
+Include the Clerk session token in the `Authorization` header:
+
+```bash
+curl -X GET http://localhost:3000/wallet \
+  -H "Authorization: Bearer <your_clerk_session_token>"
+```
+
+### Test Mode
+
+When `NODE_ENV=test`, authentication is bypassed and you can use the `x-test-user-id` header for testing:
+
+```bash
+curl -X GET http://localhost:3000/wallet \
+  -H "x-test-user-id: user-id-here"
+```
+
+### Protected Endpoints
+
+The following endpoints require authentication (marked with "requires auth" in the API documentation):
+- All `/wallet/*` endpoints (except health check)
+- User-specific `/missions/*` endpoints
+- User-specific `/analytics/*` endpoints
+- The `/missions/claim-prototype` endpoint
+
 ## API Endpoints
 
 ### Health Check
 - `GET /health` - Server health status
 
 ### Wallet (`/wallet`)
-- `GET /wallet/:userId` - Get wallet details including yield rate
-- `POST /wallet/topup` - Top up wallet balance (supports auto-staking)
-- `GET /wallet/:userId/transactions` - Get transaction history with pagination
-- `PUT /wallet/:userId/autostake` - Enable/disable auto-staking feature
-- `POST /wallet/:userId/cards` - Issue a new virtual card
-- `GET /wallet/:userId/cards` - Get all cards for a wallet
-- `GET /wallet/:userId/cards/:cardId` - Get specific card details
+- `GET /wallet` - Get wallet details for authenticated user including yield rate (requires auth)
+- `POST /wallet/topup` - Top up wallet balance for authenticated user (supports auto-staking, requires auth)
+- `GET /wallet/transactions` - Get transaction history for authenticated user with pagination (requires auth)
+- `PUT /wallet/autostake` - Enable/disable auto-staking feature for authenticated user (requires auth)
+- `POST /wallet/cards` - Issue a new virtual card for authenticated user (requires auth)
+- `GET /wallet/cards` - Get all cards for authenticated user's wallet (requires auth)
+- `GET /wallet/cards/:cardId` - Get specific card details for authenticated user (requires auth)
 
 ### POS (`/pos`)
 - `POST /pos/authorize` - Authorize a purchase using card number (handles auto-unstake, FX, mission evaluation)
@@ -139,17 +173,18 @@ Expected response:
 ### Missions (`/missions`)
 - `GET /missions` - Get all active missions
 - `GET /missions/:missionId` - Get mission details with leaderboard
-- `GET /missions/user/:userId` - Get user's enrolled missions
-- `GET /missions/user/:userId/available` - Get available missions for enrollment
-- `POST /missions/enroll` - Enroll user in a mission
-- `POST /missions/claim` - Claim mission reward
+- `GET /missions/user` - Get authenticated user's enrolled missions (requires auth)
+- `GET /missions/user/available` - Get available missions for authenticated user (requires auth)
+- `POST /missions/enroll` - Enroll authenticated user in a mission (requires auth)
+- `POST /missions/claim` - Claim mission reward for authenticated user (requires auth)
+- `POST /missions/claim-prototype` - Simulate completing an arbitrary mission and credit reward (requires auth, prototype)
 - `POST /missions` - Create new mission (admin)
 
 ### Analytics (`/analytics`)
-- `GET /analytics/user/:userId` - Get comprehensive user analytics
-- `GET /analytics/user/:userId/spending-trends` - Get spending trends over time period
+- `GET /analytics/user` - Get comprehensive analytics for authenticated user (requires auth)
+- `GET /analytics/user/spending-trends` - Get spending trends for authenticated user over time period (requires auth)
 - `GET /analytics/global` - Get global platform analytics
-- `GET /analytics/summary` - Get summary analytics (optionally filtered by userId)
+- `GET /analytics/summary` - Get summary analytics for authenticated user (or optionally filtered by userId query param)
 
 ### Yield (`/yield`)
 - `POST /yield/accrue` - Manually trigger interest accrual (for testing)
@@ -158,12 +193,14 @@ Expected response:
 
 ## Example Usage
 
+**Note**: Replace `<your_clerk_token>` with your actual Clerk session token, or use `x-test-user-id` header in test mode.
+
 ### 1. Top up wallet
 ```bash
 curl -X POST http://localhost:3000/wallet/topup \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your_clerk_token>" \
   -d '{
-    "userId": "user-id",
     "amount": 500,
     "currency": "USD"
   }'
@@ -171,8 +208,9 @@ curl -X POST http://localhost:3000/wallet/topup \
 
 ### 2. Issue a virtual card
 ```bash
-curl -X POST http://localhost:3000/wallet/user-id/cards \
+curl -X POST http://localhost:3000/wallet/cards \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your_clerk_token>" \
   -d '{
     "cardholderName": "Alice Traveler"
   }'
@@ -194,18 +232,29 @@ curl -X POST http://localhost:3000/pos/authorize \
 ```bash
 curl -X POST http://localhost:3000/missions/enroll \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your_clerk_token>" \
   -d '{
-    "userId": "user-id",
     "missionId": "mission-id"
   }'
 ```
 
 ### 5. Get user analytics
 ```bash
-curl http://localhost:3000/analytics/user/user-id
+curl http://localhost:3000/analytics/user \
+  -H "Authorization: Bearer <your_clerk_token>"
 ```
 
-### 6. Check yield statistics
+### 6. Claim a prototype mission reward
+```bash
+curl -X POST http://localhost:3000/missions/claim-prototype \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your_clerk_token>" \
+  -d '{
+    "rewardAmount": 50
+  }'
+```
+
+### 7. Check yield statistics
 ```bash
 curl http://localhost:3000/yield/stats
 ```

@@ -1,8 +1,66 @@
 import { Router } from 'express';
 import prisma from '../utils/prisma';
 import missionEngine from '../services/MissionEngine';
+import walletService from '../services/WalletService';
+import { requireAuthMiddleware, getUserId } from '../middleware/clerkAuth';
 
 const router = Router();
+
+/**
+ * POST /missions/claim-prototype - Simulate completing an arbitrary mission and credit reward
+ * This is a prototype endpoint for testing mission rewards
+ * Requires Clerk authentication
+ */
+router.post('/claim-prototype', requireAuthMiddleware, async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { rewardAmount } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!rewardAmount || typeof rewardAmount !== 'number' || rewardAmount <= 0) {
+      return res.status(400).json({ error: 'rewardAmount is required and must be a positive number' });
+    }
+
+    // Get or create wallet
+    const wallet = await walletService.getOrCreateWallet(userId);
+
+    // Add reward to wallet using WalletService (will auto-stake if enabled)
+    const result = await walletService.addFunds(userId, rewardAmount, {
+      description: `Mission reward (prototype): ${rewardAmount} USD`,
+      transactionType: 'MISSION_REWARD',
+      currency: 'USD',
+      metadata: JSON.stringify({ prototype: true })
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.message });
+    }
+
+    const autoStaked = result.autoStaked !== undefined && result.autoStaked > 0;
+
+    console.log('[REWARD_ISSUED]', { 
+      prototype: true,
+      reward_usdc_cents: Math.round(rewardAmount * 100), 
+      auto_staked: autoStaked 
+    });
+
+    res.json({
+      success: true,
+      rewardAmount,
+      wallet: result.wallet,
+      autoStaked: result.autoStaked,
+      message: autoStaked 
+        ? `Reward of ${rewardAmount} USD credited and auto-staked`
+        : `Reward of ${rewardAmount} USD credited to wallet`
+    });
+  } catch (error) {
+    console.error('Claim prototype reward error:', error);
+    res.status(500).json({ error: 'Failed to claim prototype reward' });
+  }
+});
 
 /**
  * GET /missions - Get all active missions
@@ -75,11 +133,15 @@ router.get('/:missionId', async (req, res) => {
 });
 
 /**
- * GET /missions/user/:userId - Get user's missions
+ * GET /missions/user - Get authenticated user's missions
  */
-router.get('/user/:userId', async (req, res) => {
+router.get('/user', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     const userMissions = await missionEngine.getUserMissions(userId);
 
@@ -91,11 +153,15 @@ router.get('/user/:userId', async (req, res) => {
 });
 
 /**
- * GET /missions/user/:userId/available - Get available missions for user
+ * GET /missions/user/available - Get available missions for authenticated user
  */
-router.get('/user/:userId/available', async (req, res) => {
+router.get('/user/available', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     const availableMissions = await missionEngine.getAvailableMissions(userId);
 
@@ -107,14 +173,19 @@ router.get('/user/:userId/available', async (req, res) => {
 });
 
 /**
- * POST /missions/enroll - Enroll in a mission
+ * POST /missions/enroll - Enroll authenticated user in a mission
  */
-router.post('/enroll', async (req, res) => {
+router.post('/enroll', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId, missionId } = req.body;
+    const userId = getUserId(req);
+    const { missionId } = req.body;
 
-    if (!userId || !missionId) {
-      return res.status(400).json({ error: 'userId and missionId are required' });
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!missionId) {
+      return res.status(400).json({ error: 'missionId is required' });
     }
 
     const result = await missionEngine.enrollInMission(userId, missionId);
@@ -134,14 +205,19 @@ router.post('/enroll', async (req, res) => {
 });
 
 /**
- * POST /missions/claim - Claim mission reward
+ * POST /missions/claim - Claim mission reward for authenticated user
  */
-router.post('/claim', async (req, res) => {
+router.post('/claim', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId, missionId } = req.body;
+    const userId = getUserId(req);
+    const { missionId } = req.body;
 
-    if (!userId || !missionId) {
-      return res.status(400).json({ error: 'userId and missionId are required' });
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (!missionId) {
+      return res.status(400).json({ error: 'missionId is required' });
     }
 
     const result = await missionEngine.claimReward(userId, missionId);

@@ -6,6 +6,7 @@ import posRouter from './routes/pos';
 import missionsRouter from './routes/missions';
 import analyticsRouter from './routes/analytics';
 import yieldRouter from './routes/yield';
+import { clerkAuthMiddleware } from './middleware/clerkAuth';
 
 dotenv.config();
 
@@ -16,6 +17,9 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Clerk authentication middleware (must be after body parsers)
+app.use(clerkAuthMiddleware);
 
 // Routes
 app.get('/health', (req, res) => {
