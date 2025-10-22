@@ -3,64 +3,37 @@ import lendingProtocol from '../mock/LendingProtocolMock';
 import fiatBridge from '../mock/FiatSettlementBridge';
 
 /**
- * YieldStrategyManager - Coordinates FiatSettlementBridge and LendingProtocolMock
+ * YieldManager - Coordinates FiatSettlementBridge and LendingProtocolMock
  * 
  * This service manages the yield strategy by coordinating between components:
  * - On deposit: FiatSettlementBridge (fiat→stablecoin) → LendingProtocol (deposit)
  * - On withdraw: LendingProtocol (withdraw/auto-unstake) → FiatSettlementBridge (stablecoin→fiat)
- * - Manages user shares tracking via prisma UserShare records
+ * - Manages user shares tracking via Wallet.shares field
  * - Handles wallet balance checks
  * 
  * IMPORTANT: Never calls CustodyStablecoinMock.mint/burn directly.
  * Only FiatSettlementBridge and LendingProtocolMock interact with CustodyStablecoinMock.
  */
-export class YieldStrategyManager {
-  private strategyId: string | null = null;
-
+export class YieldManager {
   /**
-   * Initialize or get the yield strategy
+   * Get the current yield rate
    */
-  async initializeStrategy(): Promise<any> {
-    try {
-      let strategy = await prisma.yieldStrategy.findFirst();
-
-      if (!strategy) {
-        strategy = await prisma.yieldStrategy.create({
-          data: {
-            minLiquidityBuffer: 0,  // No liquidity buffer
-            maxLiquidityBuffer: 0,  // No liquidity buffer
-            currentLiquidity: 0,
-            totalStaked: 0,
-            rebalanceThreshold: 0,
-            autoRebalance: false,  // No auto-rebalancing
-            lastRebalanceAt: new Date()
-          }
-        });
-      }
-
-      this.strategyId = strategy.id;
-      
-      // Initialize lending protocol
-      await lendingProtocol.initializeProtocol();
-      
-      return strategy;
-    } catch (error) {
-      console.error('Initialize yield strategy error:', error);
-      throw error;
-    }
+  getYieldRate(): number {
+    // Return a static yield rate (5% APR)
+    return parseFloat(process.env.STABLECOIN_YIELD_RATE || '0.05');
   }
 
   /**
-   * Get the yield strategy
+   * Initialize the lending protocol
    */
-  async getStrategy(): Promise<any> {
-    if (!this.strategyId) {
-      return await this.initializeStrategy();
+  async initialize(): Promise<any> {
+    try {
+      // Initialize lending protocol
+      return await lendingProtocol.initializeProtocol();
+    } catch (error) {
+      console.error('Initialize yield manager error:', error);
+      throw error;
     }
-
-    return await prisma.yieldStrategy.findUnique({
-      where: { id: this.strategyId }
-    });
   }
 
   /**
@@ -69,7 +42,7 @@ export class YieldStrategyManager {
    * Flow: 
    * 1. FiatSettlementBridge: fiat → stablecoin (mints into custody wallet)
    * 2. LendingProtocol: deposit stablecoin (issues shares)
-   * 3. Track user shares in UserShare table
+   * 3. Track user shares in Wallet
    */
   async deposit(userId: string, fiatAmount: number, currency: string = 'USD'): Promise<{
     success: boolean;
@@ -105,50 +78,19 @@ export class YieldStrategyManager {
       const sharesIssued = depositResult.shares;
       const lendingExchangeRate = depositResult.exchangeRate || 1.0;
 
-      // Step 3: Track user shares
-      // Use a unique compound key based on userId only (no custodyWalletId needed)
-      let userShare = await prisma.userShare.findFirst({
+      // Step 3: Track user shares in Wallet
+      const wallet = await prisma.wallet.findUnique({
         where: { userId }
       });
 
-      if (!userShare) {
-        // Create a dummy custody wallet for tracking purposes (backward compatibility)
-        let custodyWallet = await prisma.custodyWallet.findFirst();
-        if (!custodyWallet) {
-          custodyWallet = await prisma.custodyWallet.create({
-            data: {
-              totalPoolBalance: 0,
-              totalShares: 0,
-              exchangeRate: 1.0,
-              lastRebalanceAt: new Date()
-            }
-          });
-        }
-
-        userShare = await prisma.userShare.create({
-          data: {
-            userId,
-            custodyWalletId: custodyWallet.id,
-            shares: sharesIssued,
-            lastDepositAt: new Date()
-          }
-        });
-      } else {
-        userShare = await prisma.userShare.update({
-          where: { id: userShare.id },
-          data: {
-            shares: userShare.shares + sharesIssued,
-            lastDepositAt: new Date()
-          }
-        });
+      if (!wallet) {
+        return { success: false, message: 'Wallet not found' };
       }
 
-      // Step 4: Update strategy totals (no liquidity buffer, all goes to staked)
-      const strategy = await this.getStrategy();
-      await prisma.yieldStrategy.update({
-        where: { id: strategy.id },
+      await prisma.wallet.update({
+        where: { userId },
         data: {
-          totalStaked: strategy.totalStaked + stablecoinAmount
+          shares: wallet.shares + sharesIssued
         }
       });
 
@@ -173,7 +115,7 @@ export class YieldStrategyManager {
    * 1. Calculate shares to burn based on fiat amount needed
    * 2. LendingProtocol: withdraw (burns stablecoins from custody wallet, auto-unstake)
    * 3. FiatSettlementBridge: stablecoin → fiat (burns stablecoins and credits fiat)
-   * 4. Update user shares
+   * 4. Update user shares in Wallet
    */
   async withdraw(userId: string, fiatAmount: number, currency: string = 'USD'): Promise<{
     success: boolean;
@@ -207,11 +149,11 @@ export class YieldStrategyManager {
       const sharesToBurn = requiredStablecoinAmount / lendingExchangeRate;
 
       // Step 4: Check user has sufficient shares
-      const userShare = await prisma.userShare.findFirst({
+      const wallet = await prisma.wallet.findUnique({
         where: { userId }
       });
 
-      if (!userShare || userShare.shares < sharesToBurn) {
+      if (!wallet || wallet.shares < sharesToBurn) {
         return { success: false, message: 'Insufficient user shares' };
       }
 
@@ -233,21 +175,11 @@ export class YieldStrategyManager {
         return { success: false, message: 'Failed to convert stablecoin to fiat' };
       }
 
-      // Step 7: Update user shares
-      await prisma.userShare.update({
-        where: { id: userShare.id },
+      // Step 7: Update user shares in Wallet
+      await prisma.wallet.update({
+        where: { userId },
         data: {
-          shares: userShare.shares - sharesToBurn,
-          lastWithdrawalAt: new Date()
-        }
-      });
-
-      // Step 8: Update strategy totals
-      const strategy = await this.getStrategy();
-      await prisma.yieldStrategy.update({
-        where: { id: strategy.id },
-        data: {
-          totalStaked: Math.max(0, strategy.totalStaked - stablecoinAmount)
+          shares: wallet.shares - sharesToBurn
         }
       });
 
@@ -266,6 +198,34 @@ export class YieldStrategyManager {
   }
 
   /**
+   * Auto-unstake funds for a user
+   * This is called when a user needs funds for a transaction
+   */
+  async autoUnstake(userId: string, amount: number): Promise<{
+    success: boolean;
+    unstakedAmount?: number;
+    message?: string;
+  }> {
+    try {
+      // Withdraw from yield strategy
+      const result = await this.withdraw(userId, amount);
+      
+      if (!result.success) {
+        return { success: false, message: result.message };
+      }
+
+      return {
+        success: true,
+        unstakedAmount: amount,
+        message: 'Funds unstaked successfully'
+      };
+    } catch (error) {
+      console.error('Auto-unstake error:', error);
+      return { success: false, message: 'Failed to auto-unstake funds' };
+    }
+  }
+
+  /**
    * Get user's balance (shares * exchangeRate) in stablecoins and optionally fiat
    */
   async getUserBalance(userId: string, currency: string = 'USD'): Promise<{
@@ -279,11 +239,11 @@ export class YieldStrategyManager {
     try {
       const exchangeRate = await lendingProtocol.getExchangeRate();
 
-      const userShare = await prisma.userShare.findFirst({
+      const wallet = await prisma.wallet.findUnique({
         where: { userId }
       });
 
-      if (!userShare) {
+      if (!wallet) {
         return {
           success: true,
           shares: 0,
@@ -294,7 +254,7 @@ export class YieldStrategyManager {
       }
 
       // Calculate stablecoin balance
-      const stablecoinBalance = userShare.shares * exchangeRate;
+      const stablecoinBalance = wallet.shares * exchangeRate;
 
       // Calculate fiat balance using FiatSettlementBridge
       const conversionQuote = await fiatBridge.getStablecoinToFiatQuote(stablecoinBalance, currency);
@@ -303,7 +263,7 @@ export class YieldStrategyManager {
 
       return {
         success: true,
-        shares: userShare.shares,
+        shares: wallet.shares,
         stablecoinBalance,
         fiatBalance,
         exchangeRate,
@@ -326,22 +286,10 @@ export class YieldStrategyManager {
   }> {
     try {
       // Accrue interest in lending protocol
-      // This also syncs the exchange rate to custody wallet automatically
       const accrualResult = await lendingProtocol.accrueInterest();
       
       if (!accrualResult.success || !accrualResult.newRate) {
         return { success: false };
-      }
-
-      // Update total staked based on new rate (interest compounds into staked amount)
-      if (accrualResult.interestEarned) {
-        const strategy = await this.getStrategy();
-        await prisma.yieldStrategy.update({
-          where: { id: strategy.id },
-          data: {
-            totalStaked: strategy.totalStaked + accrualResult.interestEarned
-          }
-        });
       }
 
       return {
@@ -356,33 +304,36 @@ export class YieldStrategyManager {
   }
 
   /**
-   * Get strategy statistics (simplified - no liquidity buffer)
+   * Get statistics
    */
   async getStats(): Promise<{
     success: boolean;
     stats?: {
-      totalStaked: number;
       totalUsers: number;
       exchangeRate: number;
     };
   }> {
     try {
-      const strategy = await this.getStrategy();
       const exchangeRate = await lendingProtocol.getExchangeRate();
       
-      // Get user count
-      const userShares = await prisma.userShare.findMany();
+      // Get user count from wallets with shares > 0
+      const walletsWithShares = await prisma.wallet.findMany({
+        where: {
+          shares: {
+            gt: 0
+          }
+        }
+      });
 
       return {
         success: true,
         stats: {
-          totalStaked: strategy.totalStaked,
-          totalUsers: userShares.length,
+          totalUsers: walletsWithShares.length,
           exchangeRate
         }
       };
     } catch (error) {
-      console.error('Get strategy stats error:', error);
+      console.error('Get stats error:', error);
       return { success: false };
     }
   }
@@ -415,4 +366,4 @@ export class YieldStrategyManager {
   }
 }
 
-export default new YieldStrategyManager();
+export default new YieldManager();

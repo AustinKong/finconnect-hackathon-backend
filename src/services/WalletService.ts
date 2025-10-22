@@ -1,5 +1,5 @@
 import prisma from '../utils/prisma';
-import stablecoinAdapter from './StablecoinYieldAdapterMock';
+import yieldManager from './YieldManager';
 
 export class WalletService {
   /**

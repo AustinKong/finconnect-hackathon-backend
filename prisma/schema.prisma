@@ -28,6 +28,7 @@ model Wallet {
   balance         Float    @default(0)
   stakedAmount    Float    @default(0)
   yieldEarned     Float    @default(0)
+  shares          Float    @default(0)
   autoStake       Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -98,31 +99,6 @@ model UserMission {
 
 // New models for GlobeTrotter+ backend modules
 
-model CustodyWallet {
-  id                String   @id @default(uuid())
-  totalPoolBalance  Float    @default(0)  // Total tokens in the pooled wallet
-  totalShares       Float    @default(0)  // Total shares issued to users
-  exchangeRate      Float    @default(1.0) // Exchange rate from lending protocol (shares to tokens)
-  lastRebalanceAt   DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  userShares        UserShare[]
-}
-
-model UserShare {
-  id                String        @id @default(uuid())
-  userId            String
-  custodyWalletId   String
-  custodyWallet     CustodyWallet @relation(fields: [custodyWalletId], references: [id])
-  shares            Float         @default(0)  // User's share in the pool
-  lastDepositAt     DateTime?
-  lastWithdrawalAt  DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-
-  @@unique([userId, custodyWalletId])
-}
-
 model LendingProtocol {
   id                String   @id @default(uuid())
   name              String   @default("AaveMock")
@@ -145,19 +121,6 @@ model LendingDeposit {
   depositRate       Float           // Exchange rate at deposit time
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
-}
-
-model YieldStrategy {
-  id                String   @id @default(uuid())
-  minLiquidityBuffer Float   @default(0.1)  // 10% minimum liquidity buffer
-  maxLiquidityBuffer Float   @default(0.3)  // 30% maximum liquidity buffer
-  currentLiquidity  Float    @default(0)    // Current available liquidity
-  totalStaked       Float    @default(0)    // Total amount staked in yield protocol
-  rebalanceThreshold Float   @default(0.05) // 5% threshold to trigger rebalance
-  autoRebalance     Boolean  @default(true)
-  lastRebalanceAt   DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
 }
 
 model FiatSettlement {
