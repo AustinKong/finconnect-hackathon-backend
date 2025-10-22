@@ -238,4 +238,116 @@ router.get('/global', async (req, res) => {
   }
 });
 
+/**
+ * GET /analytics/summary - Get comprehensive summary analytics
+ * Provides a high-level view of user activity including transactions, missions, and cross-border spending
+ */
+router.get('/summary', async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    // Transaction counts and volumes
+    const totalTransactions = await prisma.transaction.count({
+      where: userId ? { userId: userId as string } : {}
+    });
+
+    const purchaseTransactions = await prisma.transaction.count({
+      where: {
+        ...(userId ? { userId: userId as string } : {}),
+        type: 'PURCHASE'
+      }
+    });
+
+    const totalVolume = await prisma.transaction.aggregate({
+      where: userId ? { userId: userId as string } : {},
+      _sum: {
+        amount: true
+      }
+    });
+
+    // Cross-border transactions (transactions with merchants in non-USD currencies)
+    const crossBorderTransactions = await prisma.transaction.findMany({
+      where: {
+        ...(userId ? { userId: userId as string } : {}),
+        type: 'PURCHASE',
+        merchantId: { not: null }
+      },
+      include: {
+        merchant: true
+      }
+    });
+
+    const crossBorderCount = crossBorderTransactions.filter(tx => 
+      tx.merchant && tx.merchant.currency !== 'USD'
+    ).length;
+
+    const crossBorderVolume = crossBorderTransactions
+      .filter(tx => tx.merchant && tx.merchant.currency !== 'USD')
+      .reduce((sum, tx) => sum + tx.amount, 0);
+
+    // Mission statistics
+    const completedMissionsCount = await prisma.userMission.count({
+      where: {
+        ...(userId ? { userId: userId as string } : {}),
+        isCompleted: true
+      }
+    });
+
+    const activeMissionsCount = await prisma.userMission.count({
+      where: {
+        ...(userId ? { userId: userId as string } : {}),
+        isCompleted: false
+      }
+    });
+
+    // Rewards earned from missions
+    const rewardsEarned = await prisma.transaction.aggregate({
+      where: {
+        ...(userId ? { userId: userId as string } : {}),
+        type: 'MISSION_REWARD'
+      },
+      _sum: {
+        amount: true
+      }
+    });
+
+    // Staking information
+    let stakingInfo = null;
+    if (userId) {
+      const wallet = await prisma.wallet.findUnique({
+        where: { userId: userId as string }
+      });
+      if (wallet) {
+        const stakedAmount = await walletService.getStakedAmount(wallet.shares);
+        stakingInfo = {
+          shares: wallet.shares,
+          stakedValue: stakedAmount,
+          yieldEarned: wallet.yieldEarned
+        };
+      }
+    }
+
+    res.json({
+      transactions: {
+        total: totalTransactions,
+        purchases: purchaseTransactions,
+        totalVolume: totalVolume._sum.amount || 0
+      },
+      crossBorder: {
+        count: crossBorderCount,
+        volume: crossBorderVolume
+      },
+      missions: {
+        completed: completedMissionsCount,
+        active: activeMissionsCount,
+        rewardsEarned: rewardsEarned._sum.amount || 0
+      },
+      ...(stakingInfo && { staking: stakingInfo })
+    });
+  } catch (error) {
+    console.error('Get summary analytics error:', error);
+    res.status(500).json({ error: 'Failed to get summary analytics' });
+  }
+});
+
 export default router;

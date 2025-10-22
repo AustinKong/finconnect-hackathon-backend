@@ -1,6 +1,7 @@
 import request from 'supertest';
 import app from '../index';
 import { PrismaClient } from '@prisma/client';
+import lendingProtocol from '../mock/LendingProtocolMock';
 
 const prisma = new PrismaClient();
 
@@ -55,6 +56,7 @@ describe('POS Authorization E2E Tests', () => {
     });
 
     // Initialize lending protocol
+    (lendingProtocol as any).protocolId = null;
     await prisma.lendingProtocol.create({
       data: {
         name: 'AaveMock',
@@ -64,6 +66,7 @@ describe('POS Authorization E2E Tests', () => {
         exchangeRate: 1.0
       }
     });
+    await lendingProtocol.initializeProtocol();
   });
 
   afterAll(async () => {

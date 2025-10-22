@@ -228,6 +228,97 @@ export class WalletService {
       return { success: false, message: 'Failed to deduct funds' };
     }
   }
+
+  /**
+   * Auto-unstake for POS transactions
+   * Converts shares directly to balance without going through fiat settlement
+   * This is a simplified version for transaction authorization flow
+   */
+  async autoUnstakeForPOS(userId: string, amountNeeded: number): Promise<{
+    success: boolean;
+    unstakedAmount?: number;
+    message?: string;
+  }> {
+    try {
+      const wallet = await prisma.wallet.findUnique({
+        where: { userId }
+      });
+
+      if (!wallet) {
+        return { success: false, message: 'Wallet not found' };
+      }
+
+      // Calculate how much we need to unstake
+      const deficit = amountNeeded - wallet.balance;
+      
+      if (deficit <= 0) {
+        return { success: true, unstakedAmount: 0, message: 'No unstaking needed' };
+      }
+
+      // Get current staked amount
+      const stakedAmount = await this.getStakedAmount(wallet.shares);
+      
+      if (stakedAmount < deficit) {
+        return { 
+          success: false, 
+          message: `Insufficient staked funds. Need ${deficit}, have ${stakedAmount} staked` 
+        };
+      }
+
+      // Calculate shares to burn based on current exchange rate
+      const exchangeRate = await lendingProtocol.getExchangeRate();
+      const sharesToBurn = deficit / exchangeRate;
+
+      if (wallet.shares < sharesToBurn) {
+        return {
+          success: false,
+          message: 'Insufficient shares'
+        };
+      }
+
+      // Withdraw from lending protocol
+      const withdrawResult = await lendingProtocol.withdraw(sharesToBurn);
+      
+      if (!withdrawResult.success || !withdrawResult.amount) {
+        return { success: false, message: 'Failed to withdraw from lending protocol' };
+      }
+
+      // Update wallet: decrease shares, increase balance
+      await prisma.wallet.update({
+        where: { userId },
+        data: {
+          shares: wallet.shares - sharesToBurn,
+          balance: wallet.balance + withdrawResult.amount
+        }
+      });
+
+      // Record unstake transaction
+      await prisma.transaction.create({
+        data: {
+          userId,
+          type: 'UNSTAKE',
+          amount: withdrawResult.amount,
+          currency: 'USD',
+          description: `Auto-unstaked ${withdrawResult.amount} USD for POS transaction`,
+          status: 'COMPLETED',
+          metadata: JSON.stringify({ 
+            autoUnstake: true,
+            sharesBurned: sharesToBurn,
+            exchangeRate 
+          })
+        }
+      });
+
+      return {
+        success: true,
+        unstakedAmount: withdrawResult.amount,
+        message: 'Funds auto-unstaked successfully'
+      };
+    } catch (error) {
+      console.error('Auto-unstake for POS error:', error);
+      return { success: false, message: 'Failed to auto-unstake funds' };
+    }
+  }
 }
 
 export default new WalletService();
