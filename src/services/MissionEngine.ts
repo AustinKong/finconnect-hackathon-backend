@@ -230,6 +230,7 @@ export class MissionEngine {
 
       // Apply reward based on type
       const mission = userMission.mission;
+      let autoStaked = false;
 
       // For CASHBACK, add to wallet balance using WalletService (will auto-stake if enabled)
       if (mission.rewardType === 'CASHBACK') {
@@ -243,6 +244,8 @@ export class MissionEngine {
         if (!result.success) {
           return { success: false, message: result.message };
         }
+
+        autoStaked = result.autoStaked !== undefined && result.autoStaked > 0;
       }
 
       // Mark reward as claimed
@@ -257,7 +260,7 @@ export class MissionEngine {
       console.log('[REWARD_ISSUED]', { 
         mission_id: mission.id, 
         reward_usdc_cents: Math.round(mission.rewardAmount * 100), 
-        auto_staked: result.autoStaked !== undefined && result.autoStaked > 0 
+        auto_staked: autoStaked 
       });
 
       return {
