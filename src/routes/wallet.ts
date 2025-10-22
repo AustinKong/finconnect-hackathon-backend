@@ -30,7 +30,7 @@ router.get(
 
       res.json({
         wallet,
-        yieldRate: yieldManager.getYieldRate()
+        stakedAmount: walletService.getStakedAmount(wallet),
       });
     } catch (error) {
       console.error('Get wallet error:', error);

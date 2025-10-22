@@ -6,7 +6,9 @@ import { getUserId } from './clerkAuth';
  * Middleware to ensure a user and wallet exist for the authenticated Clerk user.
  * If not, creates them.
  */
-export async function ensureUserAndWallet(req, res, next) {
+import { Request, Response, NextFunction } from 'express';
+
+export async function ensureUserAndWallet(req: Request, res: Response, next: NextFunction) {
   const userId = getUserId(req);
   if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -19,6 +21,8 @@ export async function ensureUserAndWallet(req, res, next) {
     user = await prisma.user.create({
       data: {
         id: userId,
+        email: req.body.email || 'unknown@example.com',
+        name: req.body.name || 'Unknown User',
         // ...add other default fields if needed...
       }
     });

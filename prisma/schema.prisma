@@ -26,7 +26,6 @@ model Wallet {
   userId          String   @unique
   user            User     @relation(fields: [userId], references: [id])
   balance         Float    @default(0)
-  stakedAmount    Float    @default(0)
   yieldEarned     Float    @default(0)
   shares          Float    @default(0)
   autoStake       Boolean  @default(true)
