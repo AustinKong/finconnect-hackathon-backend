@@ -67,6 +67,16 @@ router.post('/authorize', async (req, res) => {
       fxConversion = conversion;
     }
 
+    // Check if total available funds (balance + staked) are sufficient
+    if (wallet.balance + wallet.stakedAmount < finalAmount) {
+      return res.status(400).json({
+        error: 'Insufficient funds',
+        balance: wallet.balance,
+        stakedAmount: wallet.stakedAmount,
+        required: finalAmount
+      });
+    }
+
     // Check if we need to auto-unstake
     let autoUnstakeResult = null;
     if (wallet.balance < finalAmount && wallet.stakedAmount > 0) {
@@ -74,7 +84,7 @@ router.post('/authorize', async (req, res) => {
       
       if (!unstakeResult.success) {
         return res.status(400).json({
-          error: 'Insufficient funds',
+          error: 'Failed to auto-unstake funds',
           balance: wallet.balance,
           stakedAmount: wallet.stakedAmount,
           required: finalAmount
