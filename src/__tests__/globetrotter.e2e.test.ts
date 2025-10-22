@@ -31,15 +31,15 @@ describe('GlobeTrotter+ E2E Tests', () => {
     await prisma.mission.deleteMany({ where: { title: 'Eiffel Souvenir Spree' } });
     await prisma.merchant.deleteMany({ where: { name: { in: ['NONPARTNER_FR', 'Eiffel Tower Gift Shop'] } } });
     
-    // Clean and reinitialize lending protocol
-    await prisma.lendingDeposit.deleteMany({});
-    await prisma.lendingProtocol.deleteMany({});
-    
-    // Reset the protocol ID in the singleton
-    (lendingProtocol as any).protocolId = null;
-    
-    // Initialize lending protocol
-    await lendingProtocol.initializeProtocol();
+    // Get or initialize lending protocol (don't delete it as other tests may be using it)
+    let protocol = await prisma.lendingProtocol.findFirst();
+    if (!protocol) {
+      // Only initialize if it doesn't exist
+      await lendingProtocol.initializeProtocol();
+    } else {
+      // Just ensure the singleton has the right ID
+      (lendingProtocol as any).protocolId = protocol.id;
+    }
 
     // Create test user
     testUser = await prisma.user.create({
@@ -125,6 +125,7 @@ describe('GlobeTrotter+ E2E Tests', () => {
         } 
       } 
     });
+    // Don't delete lending protocol as other tests may be using it
     await prisma.$disconnect();
   });
 
