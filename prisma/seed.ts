@@ -22,6 +22,8 @@ async function main() {
     }
   });
 
+  console.log('[USER_CREATED]', { user: user1.email, home_country: 'US' });
+
   const user2 = await prisma.user.upsert({
     where: { email: 'bob@example.com' },
     update: {},
@@ -38,6 +40,8 @@ async function main() {
     }
   });
 
+  console.log('[USER_CREATED]', { user: user2.email, home_country: 'GB' });
+
   console.log('✅ Created users:', user1.name, user2.name);
 
   // Create cards for users
@@ -50,6 +54,8 @@ async function main() {
   });
 
   if (user1Wallet) {
+    console.log('[WALLET_CREATED]', { base_currency: 'USD' });
+
     await prisma.card.upsert({
       where: { cardNumber: '4111111111111111' },
       update: {},
@@ -64,6 +70,8 @@ async function main() {
       }
     });
 
+    console.log('[CARD_ISSUED]', { card_id: user1Wallet.id, card_last4: '1111', wallet_id: user1Wallet.id });
+
     await prisma.card.upsert({
       where: { cardNumber: '4222222222222222' },
       update: {},
@@ -77,9 +85,13 @@ async function main() {
         isActive: true
       }
     });
+
+    console.log('[CARD_ISSUED]', { card_id: user1Wallet.id, card_last4: '2222', wallet_id: user1Wallet.id });
   }
 
   if (user2Wallet) {
+    console.log('[WALLET_CREATED]', { base_currency: 'USD' });
+
     await prisma.card.upsert({
       where: { cardNumber: '4333333333333333' },
       update: {},
@@ -93,6 +105,8 @@ async function main() {
         isActive: true
       }
     });
+
+    console.log('[CARD_ISSUED]', { card_id: user2Wallet.id, card_last4: '3333', wallet_id: user2Wallet.id });
   }
 
   console.log('✅ Created cards for users');

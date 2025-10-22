@@ -83,6 +83,13 @@ export class MissionEngine {
           const targetValue = mission.targetValue || 0;
           const isCompleted = newProgress >= targetValue;
 
+          console.log('[MISSION_PROGRESS]', { 
+            mission_id: mission.id, 
+            progress_before: userMission.progress, 
+            progress_after: newProgress, 
+            status: isCompleted ? 'completed' : 'in_progress' 
+          });
+
           await prisma.userMission.update({
             where: { id: userMission.id },
             data: {
@@ -223,6 +230,7 @@ export class MissionEngine {
 
       // Apply reward based on type
       const mission = userMission.mission;
+      let autoStaked = false;
 
       // For CASHBACK, add to wallet balance using WalletService (will auto-stake if enabled)
       if (mission.rewardType === 'CASHBACK') {
@@ -236,6 +244,8 @@ export class MissionEngine {
         if (!result.success) {
           return { success: false, message: result.message };
         }
+
+        autoStaked = result.autoStaked !== undefined && result.autoStaked > 0;
       }
 
       // Mark reward as claimed
@@ -245,6 +255,12 @@ export class MissionEngine {
           rewardClaimed: true,
           claimedAt: new Date()
         }
+      });
+
+      console.log('[REWARD_ISSUED]', { 
+        mission_id: mission.id, 
+        reward_usdc_cents: Math.round(mission.rewardAmount * 100), 
+        auto_staked: autoStaked 
       });
 
       return {

@@ -235,6 +235,12 @@ export class LendingProtocolMock {
         }
       });
 
+      console.log('[YIELD_ACCRUE]', { 
+        prev_exchange_rate: oldRate, 
+        new_exchange_rate: newRate, 
+        dt_sec: secondsElapsed 
+      });
+
       // Sync exchange rate to custody wallet
       custodyWallet.updateExchangeRate(newRate);
 

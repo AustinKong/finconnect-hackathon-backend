@@ -192,6 +192,12 @@ router.post('/:userId/cards', async (req, res) => {
       }
     });
 
+    console.log('[CARD_ISSUED]', { 
+      card_id: card.id, 
+      card_last4: cardNumber.slice(-4), 
+      wallet_id: wallet.id 
+    });
+
     res.json({
       success: true,
       card: {

@@ -83,6 +83,12 @@ export class WalletService {
           }
         });
 
+        console.log('[TOPUP_SETTLED]', { 
+          amount_cents: Math.round(amount * 100), 
+          method: options.transactionType, 
+          auto_stake: autoStaked > 0 
+        });
+
         // If auto-staked, also record the stake transaction
         if (autoStaked > 0) {
           await prisma.transaction.create({
@@ -138,6 +144,8 @@ export class WalletService {
           autoStake: true
         }
       });
+
+      console.log('[WALLET_CREATED]', { base_currency: 'USD' });
     }
 
     return wallet;
