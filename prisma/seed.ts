@@ -40,6 +40,63 @@ async function main() {
 
   console.log('✅ Created users:', user1.name, user2.name);
 
+  // Create cards for users
+  const user1Wallet = await prisma.wallet.findUnique({
+    where: { userId: user1.id }
+  });
+
+  const user2Wallet = await prisma.wallet.findUnique({
+    where: { userId: user2.id }
+  });
+
+  if (user1Wallet) {
+    await prisma.card.upsert({
+      where: { cardNumber: '4111111111111111' },
+      update: {},
+      create: {
+        walletId: user1Wallet.id,
+        cardNumber: '4111111111111111',
+        cardholderName: 'Alice Traveler',
+        expiryMonth: 12,
+        expiryYear: 2027,
+        cvv: '123',
+        isActive: true
+      }
+    });
+
+    await prisma.card.upsert({
+      where: { cardNumber: '4222222222222222' },
+      update: {},
+      create: {
+        walletId: user1Wallet.id,
+        cardNumber: '4222222222222222',
+        cardholderName: 'Alice Traveler',
+        expiryMonth: 6,
+        expiryYear: 2028,
+        cvv: '456',
+        isActive: true
+      }
+    });
+  }
+
+  if (user2Wallet) {
+    await prisma.card.upsert({
+      where: { cardNumber: '4333333333333333' },
+      update: {},
+      create: {
+        walletId: user2Wallet.id,
+        cardNumber: '4333333333333333',
+        cardholderName: 'Bob Explorer',
+        expiryMonth: 9,
+        expiryYear: 2026,
+        cvv: '789',
+        isActive: true
+      }
+    });
+  }
+
+  console.log('✅ Created cards for users');
+
   // Create merchants
   const merchants = [
     {

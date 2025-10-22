@@ -151,4 +151,136 @@ router.put('/:userId/autostake', async (req, res) => {
   }
 });
 
+/**
+ * POST /wallet/:userId/cards - Issue a new card
+ */
+router.post('/:userId/cards', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { cardholderName } = req.body;
+
+    if (!cardholderName) {
+      return res.status(400).json({ error: 'cardholderName is required' });
+    }
+
+    // Get wallet
+    const wallet = await prisma.wallet.findUnique({
+      where: { userId }
+    });
+
+    if (!wallet) {
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+
+    // Generate card details
+    const cardNumber = `4${Math.random().toString().slice(2, 18)}`; // 16-digit card number starting with 4 (Visa)
+    const cvv = Math.floor(Math.random() * 900 + 100).toString(); // 3-digit CVV
+    const currentYear = new Date().getFullYear();
+    const expiryMonth = Math.floor(Math.random() * 12) + 1; // Random month 1-12
+    const expiryYear = currentYear + 3; // 3 years from now
+
+    // Create card
+    const card = await prisma.card.create({
+      data: {
+        walletId: wallet.id,
+        cardNumber,
+        cardholderName,
+        expiryMonth,
+        expiryYear,
+        cvv,
+        isActive: true
+      }
+    });
+
+    res.json({
+      success: true,
+      card: {
+        id: card.id,
+        cardNumber: card.cardNumber,
+        cardholderName: card.cardholderName,
+        expiryMonth: card.expiryMonth,
+        expiryYear: card.expiryYear,
+        cvv: card.cvv,
+        isActive: card.isActive,
+        createdAt: card.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Issue card error:', error);
+    res.status(500).json({ error: 'Failed to issue card' });
+  }
+});
+
+/**
+ * GET /wallet/:userId/cards - Get all cards for a wallet
+ */
+router.get('/:userId/cards', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    // Get wallet
+    const wallet = await prisma.wallet.findUnique({
+      where: { userId },
+      include: {
+        cards: {
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
+      }
+    });
+
+    if (!wallet) {
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+
+    res.json({
+      success: true,
+      cards: wallet.cards
+    });
+  } catch (error) {
+    console.error('Get cards error:', error);
+    res.status(500).json({ error: 'Failed to get cards' });
+  }
+});
+
+/**
+ * GET /wallet/:userId/cards/:cardId - Get card details
+ */
+router.get('/:userId/cards/:cardId', async (req, res) => {
+  try {
+    const { userId, cardId } = req.params;
+
+    // Get wallet
+    const wallet = await prisma.wallet.findUnique({
+      where: { userId }
+    });
+
+    if (!wallet) {
+      return res.status(404).json({ error: 'Wallet not found' });
+    }
+
+    // Get card and verify it belongs to this wallet
+    const card = await prisma.card.findUnique({
+      where: { id: cardId }
+    });
+
+    if (!card) {
+      return res.status(404).json({ error: 'Card not found' });
+    }
+
+    if (card.walletId !== wallet.id) {
+      return res.status(403).json({ error: 'Card does not belong to this wallet' });
+    }
+
+    res.json({
+      success: true,
+      card
+    });
+  } catch (error) {
+    console.error('Get card error:', error);
+    res.status(500).json({ error: 'Failed to get card' });
+  }
+});
+
 export default router;
