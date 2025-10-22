@@ -63,7 +63,30 @@ router.post('/claim-prototype', requireAuthMiddleware, async (req, res) => {
 });
 
 /**
- * GET /missions - Get all active missions
+ * @swagger
+ * /missions:
+ *   get:
+ *     summary: Get all active missions
+ *     description: Get a list of all active missions available on the platform
+ *     tags: [Missions]
+ *     responses:
+ *       200:
+ *         description: Missions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 missions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Mission'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/', async (req, res) => {
   try {
@@ -91,7 +114,35 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /missions/:missionId - Get mission details
+ * @swagger
+ * /missions/{missionId}:
+ *   get:
+ *     summary: Get mission details
+ *     description: Get detailed information about a specific mission including leaderboard
+ *     tags: [Missions]
+ *     parameters:
+ *       - in: path
+ *         name: missionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Mission ID
+ *     responses:
+ *       200:
+ *         description: Mission details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 mission:
+ *                   $ref: '#/components/schemas/Mission'
+ *       404:
+ *         description: Mission not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:missionId', async (req, res) => {
   try {
@@ -133,7 +184,33 @@ router.get('/:missionId', async (req, res) => {
 });
 
 /**
- * GET /missions/user - Get authenticated user's missions
+ * @swagger
+ * /missions/user:
+ *   get:
+ *     summary: Get user's enrolled missions
+ *     description: Get all missions that authenticated user has enrolled in
+ *     tags: [Missions]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     responses:
+ *       200:
+ *         description: User missions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 userMissions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/UserMission'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/user', requireAuthMiddleware, async (req, res) => {
   try {
@@ -153,7 +230,33 @@ router.get('/user', requireAuthMiddleware, async (req, res) => {
 });
 
 /**
- * GET /missions/user/available - Get available missions for authenticated user
+ * @swagger
+ * /missions/user/available:
+ *   get:
+ *     summary: Get available missions
+ *     description: Get missions that authenticated user can enroll in (not already enrolled)
+ *     tags: [Missions]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     responses:
+ *       200:
+ *         description: Available missions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 availableMissions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Mission'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/user/available', requireAuthMiddleware, async (req, res) => {
   try {
@@ -173,7 +276,51 @@ router.get('/user/available', requireAuthMiddleware, async (req, res) => {
 });
 
 /**
- * POST /missions/enroll - Enroll authenticated user in a mission
+ * @swagger
+ * /missions/enroll:
+ *   post:
+ *     summary: Enroll in a mission
+ *     description: Enroll authenticated user in a specific mission
+ *     tags: [Missions]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - missionId
+ *             properties:
+ *               missionId:
+ *                 type: string
+ *                 description: Mission ID to enroll in
+ *     responses:
+ *       200:
+ *         description: Successfully enrolled in mission
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 userMission:
+ *                   $ref: '#/components/schemas/UserMission'
+ *       400:
+ *         description: Bad request (already enrolled or invalid mission)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/enroll', requireAuthMiddleware, async (req, res) => {
   try {
@@ -205,7 +352,54 @@ router.post('/enroll', requireAuthMiddleware, async (req, res) => {
 });
 
 /**
- * POST /missions/claim - Claim mission reward for authenticated user
+ * @swagger
+ * /missions/claim:
+ *   post:
+ *     summary: Claim mission reward
+ *     description: Claim reward for a completed mission that authenticated user has enrolled in
+ *     tags: [Missions]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - missionId
+ *             properties:
+ *               missionId:
+ *                 type: string
+ *                 description: Mission ID to claim reward for
+ *     responses:
+ *       200:
+ *         description: Reward claimed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 rewardAmount:
+ *                   type: number
+ *                   format: double
+ *                 rewardType:
+ *                   type: string
+ *       400:
+ *         description: Bad request (mission not completed or already claimed)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/claim', requireAuthMiddleware, async (req, res) => {
   try {
@@ -238,7 +432,73 @@ router.post('/claim', requireAuthMiddleware, async (req, res) => {
 });
 
 /**
- * POST /missions - Create a new mission (admin)
+ * @swagger
+ * /missions:
+ *   post:
+ *     summary: Create a new mission (Admin)
+ *     description: Create a new mission on the platform (admin endpoint)
+ *     tags: [Missions]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - description
+ *               - type
+ *               - rewardAmount
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Mission title
+ *               description:
+ *                 type: string
+ *                 description: Mission description
+ *               type:
+ *                 type: string
+ *                 enum: [SPENDING, MERCHANT, CATEGORY, TRAVEL]
+ *                 description: Mission type
+ *               targetValue:
+ *                 type: number
+ *                 format: double
+ *                 description: Target value (e.g., spending amount)
+ *               targetCategory:
+ *                 type: string
+ *                 description: Target category (for CATEGORY missions)
+ *               targetMerchantId:
+ *                 type: string
+ *                 description: Target merchant ID (for MERCHANT missions)
+ *               rewardAmount:
+ *                 type: number
+ *                 format: double
+ *                 description: Reward amount
+ *               rewardType:
+ *                 type: string
+ *                 enum: [CASHBACK, POINTS, MILES]
+ *                 default: CASHBACK
+ *                 description: Type of reward
+ *               endDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Mission end date
+ *     responses:
+ *       201:
+ *         description: Mission created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 mission:
+ *                   $ref: '#/components/schemas/Mission'
+ *       400:
+ *         description: Bad request (missing required fields)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/', async (req, res) => {
   try {

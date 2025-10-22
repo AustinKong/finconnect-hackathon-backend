@@ -1,12 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
 import walletRouter from './routes/wallet';
 import posRouter from './routes/pos';
 import missionsRouter from './routes/missions';
 import analyticsRouter from './routes/analytics';
 import yieldRouter from './routes/yield';
 import { clerkAuthMiddleware } from './middleware/clerkAuth';
+import { swaggerSpec } from './swagger';
 
 dotenv.config();
 
@@ -18,10 +20,35 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 // Clerk authentication middleware (must be after body parsers)
 app.use(clerkAuthMiddleware);
 
 // Routes
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Health check endpoint
+ *     description: Returns the server health status and current timestamp
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Server is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
