@@ -41,6 +41,7 @@ router.get('/:userId', async (req, res) => {
 
 /**
  * POST /wallet/topup - Top up wallet balance
+ * Simulates adding funds to the wallet
  */
 router.post('/topup', async (req, res) => {
   try {

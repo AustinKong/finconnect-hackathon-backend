@@ -14,6 +14,8 @@ CREATE TABLE "Wallet" (
     "balance" REAL NOT NULL DEFAULT 0,
     "stakedAmount" REAL NOT NULL DEFAULT 0,
     "yieldEarned" REAL NOT NULL DEFAULT 0,
+    "shares" REAL NOT NULL DEFAULT 0,
+    "autoStake" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Wallet_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
@@ -78,6 +80,50 @@ CREATE TABLE "UserMission" (
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "UserMission_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "UserMission_missionId_fkey" FOREIGN KEY ("missionId") REFERENCES "Mission" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "LendingProtocol" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL DEFAULT 'AaveMock',
+    "currentAPR" REAL NOT NULL DEFAULT 0.05,
+    "totalDeposited" REAL NOT NULL DEFAULT 0,
+    "totalInterestEarned" REAL NOT NULL DEFAULT 0,
+    "exchangeRate" REAL NOT NULL DEFAULT 1.0,
+    "lastAccrualAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "LendingDeposit" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "protocolId" TEXT NOT NULL,
+    "amount" REAL NOT NULL,
+    "shares" REAL NOT NULL,
+    "depositRate" REAL NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "LendingDeposit_protocolId_fkey" FOREIGN KEY ("protocolId") REFERENCES "LendingProtocol" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- CreateTable
+CREATE TABLE "FiatSettlement" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "merchantId" TEXT,
+    "userId" TEXT,
+    "settlementType" TEXT NOT NULL,
+    "tokenAmount" REAL NOT NULL,
+    "fiatAmount" REAL NOT NULL,
+    "fiatCurrency" TEXT NOT NULL,
+    "fxRate" REAL NOT NULL,
+    "fxMarkup" REAL NOT NULL DEFAULT 0.02,
+    "settlementFee" REAL NOT NULL DEFAULT 0,
+    "status" TEXT NOT NULL DEFAULT 'PENDING',
+    "settledAt" DATETIME,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "FiatSettlement_merchantId_fkey" FOREIGN KEY ("merchantId") REFERENCES "Merchant" ("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- CreateIndex
