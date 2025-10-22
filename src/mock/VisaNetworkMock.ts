@@ -54,6 +54,12 @@ export class VisaNetworkMock {
 
       // Mock validation
       if (request.amount <= 0) {
+        console.log('[POS_AUTH_DECISION]', { 
+          decision: 'declined', 
+          reason: 'Invalid amount', 
+          auth_id: '' 
+        });
+
         return {
           success: false,
           authorizationId: '',
@@ -78,6 +84,12 @@ export class VisaNetworkMock {
       };
 
       this.authorizations.set(authorizationId, authorization);
+
+      console.log('[POS_AUTH_DECISION]', { 
+        decision: 'approved', 
+        reason: 'Authorization successful', 
+        auth_id: authorizationId 
+      });
 
       return {
         success: true,
@@ -164,6 +176,21 @@ export class VisaNetworkMock {
       // Update authorization status
       authorization.status = 'CAPTURED';
       authorization.capturedAmount = captureAmount;
+
+      console.log('[POS_CAPTURE]', { 
+        capture_id: captureId, 
+        auth_id: request.authorizationId, 
+        final_usd_cents: Math.round(captureAmount * 100) 
+      });
+
+      // Calculate profit breakdown
+      const visaFee = this.getProcessingFee(captureAmount);
+      const netToBank = captureAmount - visaFee;
+      console.log('[PROFIT_BREAKDOWN]', { 
+        transaction_usd_cents: Math.round(captureAmount * 100),
+        visa_fee_cents: Math.round(visaFee * 100), 
+        net_to_bank_cents: Math.round(netToBank * 100) 
+      });
 
       return {
         success: true,

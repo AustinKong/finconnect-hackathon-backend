@@ -60,6 +60,14 @@ router.post('/authorize', async (req, res) => {
       return res.status(404).json({ error: 'Merchant not found' });
     }
 
+    console.log('[POS_AUTH_REQUEST]', { 
+      amount_foreign_cents: Math.round(amount * 100), 
+      currency: merchant.currency, 
+      merchant_id: merchantId, 
+      country: merchant.country, 
+      card_token: cardNumber.slice(-8) 
+    });
+
     // Convert currency if needed
     let finalAmount = amount;
     let fxConversion = null;
@@ -68,6 +76,15 @@ router.post('/authorize', async (req, res) => {
       const conversion = fxService.convert(amount, merchant.currency, 'USD', true);
       finalAmount = conversion.finalAmount;
       fxConversion = conversion;
+
+      console.log('[FX_QUOTE_APPLIED]', { 
+        rate: conversion.rate, 
+        markup_bps: Math.round(conversion.markup * 10000), 
+        source: 'FXServiceMock', 
+        original_cents: Math.round(conversion.originalAmount * 100), 
+        converted_usd_cents: Math.round(conversion.convertedAmount * 100), 
+        final_usd_cents: Math.round(conversion.finalAmount * 100) 
+      });
     }
 
     // Check if total available funds (balance + staked) are sufficient

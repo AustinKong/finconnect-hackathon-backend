@@ -94,6 +94,13 @@ export class YieldManager {
         }
       });
 
+      console.log('[YIELD_STAKE]', { 
+        direction: 'stake', 
+        usd_cents: Math.round(stablecoinAmount * 100), 
+        shares_delta: sharesIssued, 
+        share_price_cents: Math.round(lendingExchangeRate * 100) 
+      });
+
       return {
         success: true,
         shares: sharesIssued,
@@ -181,6 +188,13 @@ export class YieldManager {
         data: {
           shares: wallet.shares - sharesToBurn
         }
+      });
+
+      console.log('[YIELD_UNSTAKE]', { 
+        direction: 'unstake', 
+        usd_cents: Math.round(stablecoinAmount * 100), 
+        shares_delta: -sharesToBurn, 
+        share_price_cents: Math.round(lendingExchangeRate * 100) 
       });
 
       return {

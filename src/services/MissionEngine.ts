@@ -83,6 +83,13 @@ export class MissionEngine {
           const targetValue = mission.targetValue || 0;
           const isCompleted = newProgress >= targetValue;
 
+          console.log('[MISSION_PROGRESS]', { 
+            mission_id: mission.id, 
+            progress_before: userMission.progress, 
+            progress_after: newProgress, 
+            status: isCompleted ? 'completed' : 'in_progress' 
+          });
+
           await prisma.userMission.update({
             where: { id: userMission.id },
             data: {
@@ -245,6 +252,12 @@ export class MissionEngine {
           rewardClaimed: true,
           claimedAt: new Date()
         }
+      });
+
+      console.log('[REWARD_ISSUED]', { 
+        mission_id: mission.id, 
+        reward_usdc_cents: Math.round(mission.rewardAmount * 100), 
+        auto_staked: result.autoStaked !== undefined && result.autoStaked > 0 
       });
 
       return {
