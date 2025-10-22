@@ -1,7 +1,19 @@
 import prisma from '../utils/prisma';
 import yieldManager from './YieldManager';
+import lendingProtocol from '../mock/LendingProtocolMock';
 
 export class WalletService {
+  /**
+   * Calculate staked amount from shares using current exchange rate
+   * This maintains a single source of truth: shares
+   */
+  async getStakedAmount(shares: number): Promise<number> {
+    if (shares === 0) {
+      return 0;
+    }
+    const exchangeRate = await lendingProtocol.getExchangeRate();
+    return shares * exchangeRate;
+  }
   /**
    * Add funds to wallet balance with optional auto-staking
    * This method should be used for all wallet balance increases
@@ -33,21 +45,26 @@ export class WalletService {
 
       let autoStaked = 0;
       let finalBalance = wallet.balance + amount;
-      let finalStakedAmount = wallet.stakedAmount;
 
-      // If auto-staking is enabled, stake the funds instead of adding to balance
+      // If auto-staking is enabled, use YieldManager to properly stake funds
       if (wallet.autoStake) {
-        autoStaked = amount;
-        finalStakedAmount = wallet.stakedAmount + amount;
-        finalBalance = wallet.balance; // Balance stays the same, funds go to staked
+        // Deposit through YieldManager (creates shares)
+        const depositResult = await yieldManager.deposit(userId, amount, options?.currency || 'USD');
+        
+        if (!depositResult.success) {
+          // If deposit fails, just add to balance instead
+          console.warn('Auto-stake deposit failed, adding to balance:', depositResult.message);
+        } else {
+          autoStaked = amount;
+          finalBalance = wallet.balance; // Balance stays the same, funds go to staked (as shares)
+        }
       }
 
-      // Update wallet
+      // Update wallet balance (shares are already updated by YieldManager if auto-staking succeeded)
       const updatedWallet = await prisma.wallet.update({
         where: { userId },
         data: {
-          balance: finalBalance,
-          stakedAmount: finalStakedAmount
+          balance: finalBalance
         }
       });
 
@@ -116,8 +133,8 @@ export class WalletService {
         data: {
           userId,
           balance: 0,
-          stakedAmount: 0,
           yieldEarned: 0,
+          shares: 0,
           autoStake: true
         }
       });

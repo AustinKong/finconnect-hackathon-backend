@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import prisma from '../utils/prisma';
+import walletService from '../services/WalletService';
 
 const router = Router();
 
@@ -14,6 +15,9 @@ router.get('/user/:userId', async (req, res) => {
     const wallet = await prisma.wallet.findUnique({
       where: { userId }
     });
+
+    // Calculate staked amount from shares
+    const stakedAmount = wallet ? await walletService.getStakedAmount(wallet.shares) : 0;
 
     // Get transaction stats
     const totalTransactions = await prisma.transaction.count({
@@ -108,9 +112,9 @@ router.get('/user/:userId', async (req, res) => {
     res.json({
       wallet: {
         balance: wallet?.balance || 0,
-        stakedAmount: wallet?.stakedAmount || 0,
+        stakedAmount: stakedAmount,
         yieldEarned: wallet?.yieldEarned || 0,
-        totalValue: (wallet?.balance || 0) + (wallet?.stakedAmount || 0)
+        totalValue: (wallet?.balance || 0) + stakedAmount
       },
       transactions: {
         total: totalTransactions,
@@ -195,11 +199,15 @@ router.get('/global', async (req, res) => {
       }
     });
 
-    const totalStaked = await prisma.wallet.aggregate({
-      _sum: {
-        stakedAmount: true
+    // Calculate total staked from shares
+    const allWallets = await prisma.wallet.findMany({
+      select: {
+        shares: true
       }
     });
+    
+    const totalShares = allWallets.reduce((sum, w) => sum + w.shares, 0);
+    const totalStaked = await walletService.getStakedAmount(totalShares);
 
     const activeMissions = await prisma.mission.count({
       where: { isActive: true }
@@ -217,7 +225,7 @@ router.get('/global', async (req, res) => {
         volume: totalVolume._sum.amount || 0
       },
       staking: {
-        totalStaked: totalStaked._sum.stakedAmount || 0
+        totalStaked: totalStaked
       },
       missions: {
         active: activeMissions,

@@ -48,6 +48,9 @@ router.post('/authorize', async (req, res) => {
     const wallet = card.wallet;
     const userId = wallet.userId;
 
+    // Calculate staked amount from shares (single source of truth)
+    const stakedAmount = await walletService.getStakedAmount(wallet.shares);
+
     // Get merchant details
     const merchant = await prisma.merchant.findUnique({
       where: { id: merchantId }
@@ -67,16 +70,26 @@ router.post('/authorize', async (req, res) => {
       fxConversion = conversion;
     }
 
+    // Check if total available funds (balance + staked) are sufficient
+    if (wallet.balance + stakedAmount < finalAmount) {
+      return res.status(400).json({
+        error: 'Insufficient funds',
+        balance: wallet.balance,
+        stakedAmount: stakedAmount,
+        required: finalAmount
+      });
+    }
+
     // Check if we need to auto-unstake
     let autoUnstakeResult = null;
-    if (wallet.balance < finalAmount && wallet.stakedAmount > 0) {
+    if (wallet.balance < finalAmount && stakedAmount > 0) {
       const unstakeResult = await yieldManager.autoUnstake(userId, finalAmount);
       
       if (!unstakeResult.success) {
         return res.status(400).json({
-          error: 'Insufficient funds',
+          error: 'Failed to auto-unstake funds',
           balance: wallet.balance,
-          stakedAmount: wallet.stakedAmount,
+          stakedAmount: stakedAmount,
           required: finalAmount
         });
       }
