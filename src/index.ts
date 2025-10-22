@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import authRouter from './routes/auth';
 import walletRouter from './routes/wallet';
 import posRouter from './routes/pos';
 import missionsRouter from './routes/missions';
@@ -22,6 +23,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.use('/auth', authRouter);
 app.use('/wallet', walletRouter);
 app.use('/pos', posRouter);
 app.use('/missions', missionsRouter);
