@@ -69,6 +69,34 @@ curl -s -X POST "$BASE_URL/wallet/topup" \
   | jq '{success, newBalance: .wallet.balance}'
 echo ""
 
+# Test 10: List cards for wallet
+echo "1️⃣1️⃣ Testing List Cards..."
+curl -s "$BASE_URL/wallet/$USER_ID/cards" \
+  | jq '{success, cardCount: (.cards | length), cards: .cards}'
+echo ""
+
+# Test 11: Issue a new card
+echo "1️⃣2️⃣ Testing Issue New Card..."
+NEW_CARD=$(curl -s -X POST "$BASE_URL/wallet/$USER_ID/cards" \
+  -H "Content-Type: application/json" \
+  -d '{"cardholderName":"Test Cardholder"}')
+echo "$NEW_CARD" | jq '{success, cardNumber: .card.cardNumber, expiryMonth: .card.expiryMonth, expiryYear: .card.expiryYear}'
+CARD_NUMBER=$(echo "$NEW_CARD" | jq -r '.card.cardNumber')
+echo ""
+
+# Get merchant ID for POS test
+MERCHANT_ID=$(sqlite3 prisma/dev.db "SELECT id FROM Merchant LIMIT 1;")
+echo "Merchant ID: $MERCHANT_ID"
+echo ""
+
+# Test 12: POS Authorization with card
+echo "1️⃣3️⃣ Testing POS Authorization with Card..."
+curl -s -X POST "$BASE_URL/pos/authorize" \
+  -H "Content-Type: application/json" \
+  -d "{\"cardNumber\":\"$CARD_NUMBER\",\"merchantId\":\"$MERCHANT_ID\",\"amount\":25,\"currency\":\"EUR\"}" \
+  | jq '{success, authorizationId: .authorization.authorizationId, cardLast4: .card.last4, newBalance: .wallet.balance}'
+echo ""
+
 echo "✅ Test suite completed!"
 echo ""
 echo "To run the server: npm run dev"
