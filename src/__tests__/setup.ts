@@ -20,8 +20,8 @@ beforeAll(async () => {
 // Clean up database after all tests
 afterAll(async () => {
   await prisma.$disconnect();
-  // Force exit after a short delay
-  setTimeout(() => process.exit(0), 1000);
+  // Force exit after a short delay to clean up hanging handles
+  setTimeout(() => process.exit(0), 500);
 });
 
 export { prisma };

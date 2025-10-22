@@ -57,12 +57,20 @@ export class LendingProtocolMock {
       return await this.initializeProtocol();
     }
 
-    return await prisma.lendingProtocol.findUnique({
+    const protocol = await prisma.lendingProtocol.findUnique({
       where: { id: this.protocolId },
       include: {
         deposits: true
       }
     });
+    
+    // If protocol was deleted, reinitialize
+    if (!protocol) {
+      this.protocolId = null;
+      return await this.initializeProtocol();
+    }
+    
+    return protocol;
   }
 
   /**

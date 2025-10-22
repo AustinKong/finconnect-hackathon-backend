@@ -9,4 +9,5 @@ module.exports = {
     '!src/**/*.d.ts',
   ],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+  maxWorkers: 1,  // Run tests sequentially to avoid database conflicts
 };

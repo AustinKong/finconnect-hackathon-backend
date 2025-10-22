@@ -83,14 +83,15 @@ router.post('/authorize', async (req, res) => {
     // Check if we need to auto-unstake
     let autoUnstakeResult = null;
     if (wallet.balance < finalAmount && stakedAmount > 0) {
-      const unstakeResult = await yieldManager.autoUnstake(userId, finalAmount);
+      const unstakeResult = await walletService.autoUnstakeForPOS(userId, finalAmount);
       
       if (!unstakeResult.success) {
         return res.status(400).json({
           error: 'Failed to auto-unstake funds',
           balance: wallet.balance,
           stakedAmount: stakedAmount,
-          required: finalAmount
+          required: finalAmount,
+          message: unstakeResult.message
         });
       }
 
@@ -105,7 +106,7 @@ router.post('/authorize', async (req, res) => {
       where: { userId }
     });
 
-    if (!currentWallet || currentWallet.balance < finalAmount) {
+    if (!currentWallet || currentWallet.balance < finalAmount - 0.01) { // Allow small floating point differences
       return res.status(400).json({
         error: 'Insufficient funds',
         balance: currentWallet?.balance || 0,
