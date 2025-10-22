@@ -9,8 +9,102 @@ import walletService from '../services/WalletService';
 const router = Router();
 
 /**
- * POST /pos/authorize - Authorize a POS transaction
- * Handles: auto-unstake, FX conversion, mission evaluation
+ * @swagger
+ * /pos/authorize:
+ *   post:
+ *     summary: Authorize a POS transaction
+ *     description: Authorize a purchase using card number. Handles auto-unstake, FX conversion, and mission evaluation.
+ *     tags: [POS]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - cardNumber
+ *               - merchantId
+ *               - amount
+ *             properties:
+ *               cardNumber:
+ *                 type: string
+ *                 description: Card number to use for payment
+ *                 example: "4123456789012345"
+ *               merchantId:
+ *                 type: string
+ *                 description: Merchant ID
+ *               amount:
+ *                 type: number
+ *                 format: double
+ *                 description: Transaction amount
+ *                 example: 100
+ *               currency:
+ *                 type: string
+ *                 description: Currency code
+ *                 default: USD
+ *                 example: USD
+ *     responses:
+ *       200:
+ *         description: Transaction authorized successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 authorization:
+ *                   type: object
+ *                   properties:
+ *                     authorizationId:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                 capture:
+ *                   type: object
+ *                   properties:
+ *                     captureId:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                 transaction:
+ *                   $ref: '#/components/schemas/Transaction'
+ *                 merchant:
+ *                   $ref: '#/components/schemas/Merchant'
+ *                 card:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     last4:
+ *                       type: string
+ *                 fxConversion:
+ *                   type: object
+ *                   nullable: true
+ *                 autoUnstake:
+ *                   type: object
+ *                   nullable: true
+ *                 missions:
+ *                   type: object
+ *                   properties:
+ *                     updated:
+ *                       type: integer
+ *                     completed:
+ *                       type: integer
+ *                 wallet:
+ *                   $ref: '#/components/schemas/Wallet'
+ *       400:
+ *         description: Bad request (missing parameters or insufficient funds)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Card or merchant not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/authorize', async (req, res) => {
   try {
@@ -229,7 +323,57 @@ router.post('/authorize', async (req, res) => {
 });
 
 /**
- * POST /pos/refund - Refund a transaction
+ * @swagger
+ * /pos/refund:
+ *   post:
+ *     summary: Refund a transaction
+ *     description: Process a refund for a previous transaction. Supports auto-staking if enabled.
+ *     tags: [POS]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - transactionId
+ *             properties:
+ *               transactionId:
+ *                 type: string
+ *                 description: Transaction ID to refund
+ *               amount:
+ *                 type: number
+ *                 format: double
+ *                 description: Amount to refund (optional, defaults to full transaction amount)
+ *     responses:
+ *       200:
+ *         description: Refund processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 wallet:
+ *                   $ref: '#/components/schemas/Wallet'
+ *                 autoStaked:
+ *                   type: number
+ *                   format: double
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request (invalid amount or missing transactionId)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Transaction not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/refund', async (req, res) => {
   try {

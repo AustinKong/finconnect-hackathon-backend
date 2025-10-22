@@ -6,11 +6,48 @@ import prisma from '../utils/prisma';
 const router = Router();
 
 /**
- * POST /yield/accrue - Manually accrue interest
- * Used for testing to simulate time passage
- * 
- * Body:
- *   - now_sec: Optional timestamp in seconds to simulate accrual up to this time
+ * @swagger
+ * /yield/accrue:
+ *   post:
+ *     summary: Manually accrue interest
+ *     description: Trigger manual interest accrual (used for testing to simulate time passage)
+ *     tags: [Yield]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               now_sec:
+ *                 type: integer
+ *                 description: Optional timestamp in seconds to simulate accrual up to this time
+ *     responses:
+ *       200:
+ *         description: Interest accrued successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 oldRate:
+ *                   type: number
+ *                   format: double
+ *                 newRate:
+ *                   type: number
+ *                   format: double
+ *                 interestEarned:
+ *                   type: number
+ *                   format: double
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Failed to accrue interest
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/accrue', async (req, res) => {
   try {
@@ -54,7 +91,35 @@ router.post('/accrue', async (req, res) => {
 });
 
 /**
- * GET /yield/rate - Get current yield rate
+ * @swagger
+ * /yield/rate:
+ *   get:
+ *     summary: Get current yield rate
+ *     description: Get the current yield rate, exchange rate, and calculated APY
+ *     tags: [Yield]
+ *     responses:
+ *       200:
+ *         description: Yield rate retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 yieldRate:
+ *                   type: number
+ *                   format: double
+ *                 exchangeRate:
+ *                   type: number
+ *                   format: double
+ *                 apy:
+ *                   type: number
+ *                   format: double
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/rate', async (req, res) => {
   try {
@@ -73,7 +138,31 @@ router.get('/rate', async (req, res) => {
 });
 
 /**
- * GET /yield/stats - Get yield statistics
+ * @swagger
+ * /yield/stats:
+ *   get:
+ *     summary: Get yield statistics
+ *     description: Get comprehensive yield statistics including pool data and performance metrics
+ *     tags: [Yield]
+ *     responses:
+ *       200:
+ *         description: Yield statistics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 stats:
+ *                   type: object
+ *                   description: Yield statistics object
+ *       400:
+ *         description: Failed to get yield stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/stats', async (req, res) => {
   try {

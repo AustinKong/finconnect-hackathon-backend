@@ -8,7 +8,40 @@ import { ensureUserAndWallet } from '../middleware/ensureUserAndWallet';
 const router = Router();
 
 /**
- * GET /wallet - Get wallet details for authenticated user
+ * @swagger
+ * /wallet:
+ *   get:
+ *     summary: Get wallet details
+ *     description: Get wallet details for authenticated user including balance, shares, and staked amount
+ *     tags: [Wallet]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     responses:
+ *       200:
+ *         description: Wallet details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 wallet:
+ *                   $ref: '#/components/schemas/Wallet'
+ *                 stakedAmount:
+ *                   type: number
+ *                   format: double
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Wallet not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get(
   '/',
@@ -40,9 +73,63 @@ router.get(
 );
 
 /**
- * POST /wallet/topup - Top up wallet balance
- * Simulates adding funds to the wallet
- * Uses authenticated user ID from Clerk
+ * @swagger
+ * /wallet/topup:
+ *   post:
+ *     summary: Top up wallet balance
+ *     description: Add funds to the wallet for authenticated user. Supports auto-staking if enabled.
+ *     tags: [Wallet]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 format: double
+ *                 description: Amount to add to wallet (must be positive)
+ *                 example: 500
+ *               currency:
+ *                 type: string
+ *                 description: Currency code
+ *                 default: USD
+ *                 example: USD
+ *     responses:
+ *       200:
+ *         description: Wallet topped up successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 wallet:
+ *                   $ref: '#/components/schemas/Wallet'
+ *                 autoStaked:
+ *                   type: number
+ *                   format: double
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request (invalid amount)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post(
   '/topup',
@@ -98,7 +185,54 @@ router.post(
 );
 
 /**
- * GET /wallet/transactions - Get wallet transactions for authenticated user
+ * @swagger
+ * /wallet/transactions:
+ *   get:
+ *     summary: Get wallet transactions
+ *     description: Get transaction history for authenticated user with pagination
+ *     tags: [Wallet]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           minimum: 1
+ *         description: Maximum number of transactions to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *           minimum: 0
+ *         description: Number of transactions to skip
+ *     responses:
+ *       200:
+ *         description: Transactions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 transactions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Transaction'
+ *                 total:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get(
   '/transactions',
@@ -143,7 +277,60 @@ router.get(
 );
 
 /**
- * PUT /wallet/autostake - Update auto-stake setting for authenticated user
+ * @swagger
+ * /wallet/autostake:
+ *   put:
+ *     summary: Update auto-stake setting
+ *     description: Enable or disable auto-staking feature for authenticated user
+ *     tags: [Wallet]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - autoStake
+ *             properties:
+ *               autoStake:
+ *                 type: boolean
+ *                 description: Enable or disable auto-staking
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Auto-stake setting updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 wallet:
+ *                   $ref: '#/components/schemas/Wallet'
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Bad request (invalid autoStake value)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Wallet not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.put(
   '/autostake',
@@ -181,7 +368,58 @@ router.put(
 );
 
 /**
- * POST /wallet/cards - Issue a new card for authenticated user
+ * @swagger
+ * /wallet/cards:
+ *   post:
+ *     summary: Issue a new virtual card
+ *     description: Create a new virtual card linked to the authenticated user's wallet
+ *     tags: [Cards]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - cardholderName
+ *             properties:
+ *               cardholderName:
+ *                 type: string
+ *                 description: Name to appear on the card
+ *                 example: Alice Traveler
+ *     responses:
+ *       200:
+ *         description: Card issued successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 card:
+ *                   $ref: '#/components/schemas/Card'
+ *       400:
+ *         description: Bad request (missing cardholderName)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Wallet not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post(
   '/cards',
@@ -256,7 +494,41 @@ router.post(
 );
 
 /**
- * GET /wallet/cards - Get all cards for authenticated user's wallet
+ * @swagger
+ * /wallet/cards:
+ *   get:
+ *     summary: Get all cards
+ *     description: Get all virtual cards associated with authenticated user's wallet
+ *     tags: [Cards]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     responses:
+ *       200:
+ *         description: Cards retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 cards:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Card'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Wallet not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get(
   '/cards',
@@ -298,7 +570,52 @@ router.get(
 );
 
 /**
- * GET /wallet/cards/:cardId - Get card details for authenticated user
+ * @swagger
+ * /wallet/cards/{cardId}:
+ *   get:
+ *     summary: Get specific card details
+ *     description: Get details for a specific virtual card owned by authenticated user
+ *     tags: [Cards]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     parameters:
+ *       - in: path
+ *         name: cardId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Card ID
+ *     responses:
+ *       200:
+ *         description: Card details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 card:
+ *                   $ref: '#/components/schemas/Card'
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Card does not belong to this wallet
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Card or wallet not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get(
   '/cards/:cardId',

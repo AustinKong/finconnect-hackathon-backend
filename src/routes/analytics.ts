@@ -6,7 +6,78 @@ import { requireAuthMiddleware, getUserId } from '../middleware/clerkAuth';
 const router = Router();
 
 /**
- * GET /analytics/user - Get analytics for authenticated user
+ * @swagger
+ * /analytics/user:
+ *   get:
+ *     summary: Get user analytics
+ *     description: Get comprehensive analytics for authenticated user including wallet, transactions, spending, and missions
+ *     tags: [Analytics]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     responses:
+ *       200:
+ *         description: Analytics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 wallet:
+ *                   type: object
+ *                   properties:
+ *                     balance:
+ *                       type: number
+ *                       format: double
+ *                     stakedAmount:
+ *                       type: number
+ *                       format: double
+ *                     yieldEarned:
+ *                       type: number
+ *                       format: double
+ *                     totalValue:
+ *                       type: number
+ *                       format: double
+ *                 transactions:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     totalSpent:
+ *                       type: number
+ *                       format: double
+ *                     totalTopups:
+ *                       type: number
+ *                       format: double
+ *                 spending:
+ *                   type: object
+ *                   properties:
+ *                     byCategory:
+ *                       type: object
+ *                       additionalProperties:
+ *                         type: object
+ *                         properties:
+ *                           total:
+ *                             type: number
+ *                             format: double
+ *                           count:
+ *                             type: integer
+ *                 missions:
+ *                   type: object
+ *                   properties:
+ *                     completed:
+ *                       type: integer
+ *                     active:
+ *                       type: integer
+ *                     rewardsEarned:
+ *                       type: number
+ *                       format: double
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/user', requireAuthMiddleware, async (req, res) => {
   try {
@@ -142,7 +213,48 @@ router.get('/user', requireAuthMiddleware, async (req, res) => {
 });
 
 /**
- * GET /analytics/user/spending-trends - Get spending trends for authenticated user
+ * @swagger
+ * /analytics/user/spending-trends:
+ *   get:
+ *     summary: Get spending trends
+ *     description: Get spending trends for authenticated user over specified time period
+ *     tags: [Analytics]
+ *     security:
+ *       - ClerkAuth: []
+ *       - TestUserId: []
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           default: "30"
+ *         description: Number of days to analyze (default 30)
+ *     responses:
+ *       200:
+ *         description: Spending trends retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 period:
+ *                   type: string
+ *                 transactions:
+ *                   type: integer
+ *                 dailySpending:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: number
+ *                     format: double
+ *                 total:
+ *                   type: number
+ *                   format: double
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/user/spending-trends', requireAuthMiddleware, async (req, res) => {
   try {
@@ -194,7 +306,51 @@ router.get('/user/spending-trends', requireAuthMiddleware, async (req, res) => {
 });
 
 /**
- * GET /analytics/global - Get global analytics
+ * @swagger
+ * /analytics/global:
+ *   get:
+ *     summary: Get global platform analytics
+ *     description: Get aggregated analytics across all users on the platform
+ *     tags: [Analytics]
+ *     responses:
+ *       200:
+ *         description: Global analytics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 users:
+ *                   type: integer
+ *                 wallets:
+ *                   type: integer
+ *                 transactions:
+ *                   type: object
+ *                   properties:
+ *                     count:
+ *                       type: integer
+ *                     volume:
+ *                       type: number
+ *                       format: double
+ *                 staking:
+ *                   type: object
+ *                   properties:
+ *                     totalStaked:
+ *                       type: number
+ *                       format: double
+ *                 missions:
+ *                   type: object
+ *                   properties:
+ *                     active:
+ *                       type: integer
+ *                     completed:
+ *                       type: integer
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/global', async (req, res) => {
   try {
@@ -248,9 +404,73 @@ router.get('/global', async (req, res) => {
 });
 
 /**
- * GET /analytics/summary - Get comprehensive summary analytics
- * Provides a high-level view of user activity including transactions, missions, and cross-border spending
- * Uses authenticated user if no userId query parameter is provided
+ * @swagger
+ * /analytics/summary:
+ *   get:
+ *     summary: Get summary analytics
+ *     description: Get comprehensive summary analytics including transactions, cross-border spending, missions, and staking. Uses authenticated user if no userId query parameter is provided.
+ *     tags: [Analytics]
+ *     parameters:
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *         description: Optional user ID (for admin access, otherwise uses authenticated user)
+ *     responses:
+ *       200:
+ *         description: Summary analytics retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 transactions:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     purchases:
+ *                       type: integer
+ *                     totalVolume:
+ *                       type: number
+ *                       format: double
+ *                 crossBorder:
+ *                   type: object
+ *                   properties:
+ *                     count:
+ *                       type: integer
+ *                     volume:
+ *                       type: number
+ *                       format: double
+ *                 missions:
+ *                   type: object
+ *                   properties:
+ *                     completed:
+ *                       type: integer
+ *                     active:
+ *                       type: integer
+ *                     rewardsEarned:
+ *                       type: number
+ *                       format: double
+ *                 staking:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     shares:
+ *                       type: number
+ *                       format: double
+ *                     stakedValue:
+ *                       type: number
+ *                       format: double
+ *                     yieldEarned:
+ *                       type: number
+ *                       format: double
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/summary', async (req, res) => {
   try {
