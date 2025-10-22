@@ -32,6 +32,21 @@ model Wallet {
   autoStake       Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  cards           Card[]
+}
+
+model Card {
+  id              String   @id @default(uuid())
+  walletId        String
+  wallet          Wallet   @relation(fields: [walletId], references: [id])
+  cardNumber      String   @unique
+  cardholderName  String
+  expiryMonth     Int
+  expiryYear      Int
+  cvv             String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model Transaction {

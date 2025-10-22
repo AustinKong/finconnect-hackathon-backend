@@ -15,16 +15,38 @@ const router = Router();
 router.post('/authorize', async (req, res) => {
   try {
     const {
-      userId,
+      cardNumber,
       merchantId,
       amount,
-      currency = 'USD',
-      cardNumber = 'MOCK_CARD'
+      currency = 'USD'
     } = req.body;
 
-    if (!userId || !merchantId || !amount) {
-      return res.status(400).json({ error: 'userId, merchantId, and amount are required' });
+    if (!cardNumber || !merchantId || !amount) {
+      return res.status(400).json({ error: 'cardNumber, merchantId, and amount are required' });
     }
+
+    // Get card and wallet
+    const card = await prisma.card.findUnique({
+      where: { cardNumber },
+      include: {
+        wallet: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+
+    if (!card) {
+      return res.status(404).json({ error: 'Card not found' });
+    }
+
+    if (!card.isActive) {
+      return res.status(400).json({ error: 'Card is not active' });
+    }
+
+    const wallet = card.wallet;
+    const userId = wallet.userId;
 
     // Get merchant details
     const merchant = await prisma.merchant.findUnique({
@@ -33,15 +55,6 @@ router.post('/authorize', async (req, res) => {
 
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant not found' });
-    }
-
-    // Get wallet
-    const wallet = await prisma.wallet.findUnique({
-      where: { userId }
-    });
-
-    if (!wallet) {
-      return res.status(404).json({ error: 'Wallet not found' });
     }
 
     // Convert currency if needed
@@ -96,7 +109,8 @@ router.post('/authorize', async (req, res) => {
       metadata: {
         originalAmount: amount,
         originalCurrency: merchant.currency,
-        fxConversion
+        fxConversion,
+        cardId: card.id
       }
     });
 
@@ -107,7 +121,7 @@ router.post('/authorize', async (req, res) => {
       });
     }
 
-    // Deduct from wallet
+    // Deduct from wallet (not from card - card doesn't hold balance)
     await prisma.wallet.update({
       where: { userId },
       data: {
@@ -130,7 +144,9 @@ router.post('/authorize', async (req, res) => {
           originalAmount: amount,
           originalCurrency: merchant.currency,
           fxConversion,
-          autoUnstake: autoUnstakeResult
+          autoUnstake: autoUnstakeResult,
+          cardId: card.id,
+          cardNumber: cardNumber.slice(-4) // Store last 4 digits for reference
         })
       }
     });
@@ -163,6 +179,10 @@ router.post('/authorize', async (req, res) => {
       },
       transaction,
       merchant,
+      card: {
+        id: card.id,
+        last4: cardNumber.slice(-4)
+      },
       fxConversion,
       autoUnstake: autoUnstakeResult,
       missions: {
