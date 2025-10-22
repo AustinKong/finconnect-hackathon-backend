@@ -1,15 +1,20 @@
 import { Router } from 'express';
 import prisma from '../utils/prisma';
 import walletService from '../services/WalletService';
+import { requireAuthMiddleware, getUserId } from '../middleware/clerkAuth';
 
 const router = Router();
 
 /**
- * GET /analytics/user/:userId - Get user analytics
+ * GET /analytics/user - Get analytics for authenticated user
  */
-router.get('/user/:userId', async (req, res) => {
+router.get('/user', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     // Get wallet info
     const wallet = await prisma.wallet.findUnique({
@@ -137,12 +142,16 @@ router.get('/user/:userId', async (req, res) => {
 });
 
 /**
- * GET /analytics/user/:userId/spending-trends - Get spending trends
+ * GET /analytics/user/spending-trends - Get spending trends for authenticated user
  */
-router.get('/user/:userId/spending-trends', async (req, res) => {
+router.get('/user/spending-trends', requireAuthMiddleware, async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = getUserId(req);
     const { period = '30' } = req.query;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
 
     const daysAgo = parseInt(period as string);
     const startDate = new Date();
@@ -241,10 +250,17 @@ router.get('/global', async (req, res) => {
 /**
  * GET /analytics/summary - Get comprehensive summary analytics
  * Provides a high-level view of user activity including transactions, missions, and cross-border spending
+ * Uses authenticated user if no userId query parameter is provided
  */
 router.get('/summary', async (req, res) => {
   try {
-    const { userId } = req.query;
+    // Try to get userId from query parameter first (for admin access), then from Clerk auth
+    let userId = req.query.userId as string | undefined;
+    
+    if (!userId) {
+      // If no userId in query, try to get from Clerk auth
+      userId = getUserId(req) || undefined;
+    }
 
     // Transaction counts and volumes
     const totalTransactions = await prisma.transaction.count({
