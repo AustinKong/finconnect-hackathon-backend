@@ -56,7 +56,6 @@ async function testModules() {
         data: {
           userId: testUserId,
           balance: 0,
-          stakedAmount: 0,
           yieldEarned: 0,
           shares: 0,
           autoStake: true

@@ -24,7 +24,6 @@ describe('POS Authorization E2E Tests', () => {
       data: {
         userId: testUser.id,
         balance: 0,
-        stakedAmount: 0,
         yieldEarned: 0,
         shares: 0,
         autoStake: false
@@ -85,7 +84,6 @@ describe('POS Authorization E2E Tests', () => {
       where: { id: testWallet.id },
       data: {
         balance: 0,
-        stakedAmount: 0,
         shares: 0
       }
     });
@@ -126,14 +124,13 @@ describe('POS Authorization E2E Tests', () => {
 
   describe('Scenario 2: Insufficient balance, but sufficient when auto-unstaking', () => {
     it('should auto-unstake and authorize purchase with simple staking', async () => {
-      // Manually set up wallet with balance and stakedAmount (simple staking)
-      // Note: This simulates a state but auto-unstake via YieldManager requires shares setup
-      // For now, we'll test that the sum check works correctly
+      // Set up wallet with balance and shares (which represent staked amount)
+      // shares * exchangeRate (1.0) = stakedAmount
       await prisma.wallet.update({
         where: { id: testWallet.id },
         data: { 
           balance: 30,
-          stakedAmount: 50  // Simple staking amount
+          shares: 50  // 50 shares at exchangeRate 1.0 = 50 staked
         }
       });
 
@@ -147,7 +144,7 @@ describe('POS Authorization E2E Tests', () => {
         });
 
       // With the fix, this should NOT return "Insufficient funds" immediately
-      // because balance (30) + stakedAmount (50) = 80 >= 50 (required)
+      // because balance (30) + stakedAmount (50 shares * 1.0) = 80 >= 50 (required)
       // However, auto-unstake may fail if shares aren't set up properly
       // This demonstrates the fix works - we don't get rejected at the sum check
       if (response.status === 400) {
@@ -168,7 +165,7 @@ describe('POS Authorization E2E Tests', () => {
         where: { id: testWallet.id },
         data: { 
           balance: 20,
-          stakedAmount: 10
+          shares: 10  // 10 shares * 1.0 exchangeRate = 10 staked
         }
       });
 
@@ -193,7 +190,7 @@ describe('POS Authorization E2E Tests', () => {
         where: { id: testWallet.id },
         data: { 
           balance: 0,
-          stakedAmount: 30
+          shares: 30  // 30 shares * 1.0 = 30 staked
         }
       });
 
@@ -215,7 +212,7 @@ describe('POS Authorization E2E Tests', () => {
         where: { id: testWallet.id },
         data: { 
           balance: 15,
-          stakedAmount: 15
+          shares: 15  // 15 shares * 1.0 = 15 staked
         }
       });
 
@@ -265,7 +262,7 @@ describe('POS Authorization E2E Tests', () => {
         where: { id: testWallet.id },
         data: { 
           balance: 30,
-          stakedAmount: 30
+          shares: 30  // 30 shares * 1.0 = 30 staked
         }
       });
 
@@ -279,7 +276,7 @@ describe('POS Authorization E2E Tests', () => {
         });
 
       // The key fix: this should not return "Insufficient funds" at the sum check
-      // balance (30) + stakedAmount (30) = 60 >= 50 (required)
+      // balance (30) + stakedAmount (30 shares * 1.0) = 60 >= 50 (required)
       if (response.status === 400) {
         // If it fails, it should NOT be due to insufficient sum
         expect(response.body.error).not.toBe('Insufficient funds');
