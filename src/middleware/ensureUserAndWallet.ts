@@ -32,7 +32,28 @@ export async function ensureUserAndWallet(req: Request, res: Response, next: Nex
   let wallet = await prisma.wallet.findUnique({ where: { userId } });
   if (!wallet) {
     // Create wallet
-    await walletService.getOrCreateWallet(userId);
+    const wallet = await walletService.getOrCreateWallet(userId);
+
+    const cardNumber = `4${Math.random().toString().slice(2, 18)}`; // 16-digit card number starting with 4 (Visa)
+    const cvv = Math.floor(Math.random() * 900 + 100).toString(); // 3-digit CVV
+    const currentYear = new Date().getFullYear();
+    const expiryMonth = Math.floor(Math.random() * 12) + 1; // Random month 1-12
+    const expiryYear = currentYear + 3; // 3 years from now
+
+    const cardId = await prisma.card.create({
+      data: {
+        walletId: wallet.id,
+        cardNumber: '0000-0000-0000-0000', // Placeholder card number
+        cardholderName: "cardholder",
+        expiryMonth,
+        expiryYear,
+        cvv,
+        isActive: true,
+
+      }
+    })
+
+    console.log('[CARD_ISSUED]', { card_id: cardId, cardNumber: "0000-0000-0000-0000", wallet_id: wallet.id });
   }
 
   next();
