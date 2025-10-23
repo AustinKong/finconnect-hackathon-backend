@@ -15,7 +15,6 @@ async function main() {
       wallet: {
         create: {
           balance: 1000,
-          stakedAmount: 500,
           yieldEarned: 25
         }
       }
@@ -33,7 +32,6 @@ async function main() {
       wallet: {
         create: {
           balance: 500,
-          stakedAmount: 0,
           yieldEarned: 0
         }
       }
